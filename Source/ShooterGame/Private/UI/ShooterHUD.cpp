@@ -133,23 +133,62 @@ void AShooterHUD::DrawInteract()
 	if (MyPawn->CanInteract(&PointingAtObject))
 	{
 		//Get the Object's name, the first stored tag.
-		FString JohnText = FString();
-		JohnText = PointingAtObject->Tags[0].ToString();
+		FString ObjectText = FString();
+		ObjectText = PointingAtObject->Tags[0].ToString();
 
-			
+
+		AShooterWeaponPickup* PointingAtPickup = Cast<AShooterWeaponPickup>(PointingAtObject);
+		AShooterWeapon* PointingAtWeapon = PointingAtPickup->WeaponPickup;
+
 		float TextXL;
 		float TextYL;
-		const float TextOffsetX = 500;
-		const float TextOffsetY = 500;
-		Canvas->TextSize(NormalFont, JohnText, TextXL, TextYL, ScaleUI, ScaleUI);
+		//const float TextOffsetX = 200;
+		//const float TextOffsetY = 250;
+		const float TextOffsetX = -100;
+		const float TextOffsetY = 100;
+		Canvas->TextSize(NormalFont, ObjectText, TextXL, TextYL, ScaleUI, ScaleUI);
 
 		//Where to draw the "interact" prompt
-		const float TextPosX = Canvas->ClipX - Canvas->OrgX - ((TextOffsetX + TextXL) / 2.0f + 2 * Offset) * ScaleUI;
-		const float TextPosY = Canvas->ClipY - Canvas->OrgY - ((TextOffsetY + TextYL) / 2 + Offset) * ScaleUI;
+		/*const float TextPosX = Canvas->ClipX - Canvas->OrgX - ((TextOffsetX + TextXL) / 2.0f + 2 * Offset) * ScaleUI;
+		const float TextPosY = Canvas->ClipY - Canvas->OrgY - ((TextOffsetY + TextYL) / 2 + Offset) * ScaleUI;*/
+
+		const float TextPosX = (Canvas->ClipX - (TextXL- TextOffsetX) * ScaleUI) / 2;
+		const float TextPosY = Canvas->ClipY - (Offset + TextYL + TextOffsetY) * ScaleUI;
+		AShooterWeapon* PawnWeapon = MyPawn->FindWeapon(PointingAtPickup->WeaponType);
+		//if the player already has this weapon
+		if (PawnWeapon)
+		{
+			//Draw the weapon name dark
+			Canvas->SetDrawColor(HUDDark);
+		}
+		else
+		{
+			//draw it white
+			Canvas->SetDrawColor(FColor::White);
+		}
 
 		//Draw the interact prompt
-		Canvas->SetDrawColor(FColor::White);
-		Canvas->DrawText(NormalFont, JohnText, TextPosX, TextPosY, ScaleUI*2, ScaleUI*2, ShadowedFont);
+		
+		Canvas->DrawText(NormalFont, ObjectText, TextPosX, TextPosY, ScaleUI*2, ScaleUI*2, ShadowedFont);
+
+		//Ammo string
+		FString AmmoText = FString();
+
+		AmmoText = FName(TEXT("Ammo")).ToString();
+
+		float AmmoTextXL;
+		float AmmoTextYL;
+
+		Canvas->TextSize(NormalFont, AmmoText, AmmoTextXL, AmmoTextYL, ScaleUI, ScaleUI);
+
+		const float AmmoTextPosX = TextPosX + TextXL + AmmoTextXL + 35;
+		const float AmmoTextPosY = TextPosY;
+
+		if (PawnWeapon && PawnWeapon->GetCurrentAmmo() < PawnWeapon->GetMaxAmmo() && PointingAtWeapon->GetCurrentAmmo() > 0)
+		{
+			Canvas->SetDrawColor(FColor::White);
+			Canvas->DrawText(NormalFont, AmmoText, AmmoTextPosX, AmmoTextPosY, ScaleUI * 2, ScaleUI * 2, ShadowedFont);
+		}
 	}
 }
 
@@ -166,9 +205,28 @@ void AShooterHUD::DrawWeaponHUD()
 		Canvas->SetDrawColor(FColor::White);
 		const float PriWeapBgPosY =  Canvas->ClipY - Canvas->OrgY - (PriWeapOffsetY + PrimaryWeapBg.VL + Offset) * ScaleUI;
 
+		//John
+		//Draw weapon text
+		float TextXL;
+		float TextYL;
+		const float PriWeapTextOffsetX = 0;
+		const float PriWeapTextOffsetY = 30;
+
+		FString PriWeaponText = FString();
+		PriWeaponText = MyWeapon->Tags[0].ToString();
+
+		Canvas->TextSize(NormalFont, PriWeaponText, TextXL, TextYL, ScaleUI, ScaleUI);
+
 		//Weapon draw position
 		const float PriWeapPosX = Canvas->ClipX - Canvas->OrgX - ((PriWeaponBoxWidth + MyWeapon->PrimaryIcon.UL) / 2.0f + 2 * Offset) * ScaleUI;
 		const float PriWeapPosY =  Canvas->ClipY - Canvas->OrgY - (PriWeapOffsetY + (PrimaryWeapBg.VL + MyWeapon->PrimaryIcon.VL) / 2 + Offset) * ScaleUI;
+
+		Canvas->SetDrawColor(HUDDark);
+		//Draw the weapon name
+		Canvas->DrawText(NormalFont, PriWeaponText, PriWeapPosX-PriWeapTextOffsetX, PriWeapPosY-PriWeapTextOffsetY, ScaleUI*1.5, ScaleUI*1.5, ShadowedFont);
+
+		Canvas->SetDrawColor(FColor::White);
+
 
 		//Clip draw position
 		const float ClipWidth = MyWeapon->PrimaryClipIcon.UL +  MyWeapon->PrimaryClipIconOffset * (MyWeapon->AmmoIconsCount-1);
@@ -255,6 +313,7 @@ void AShooterHUD::DrawWeaponHUD()
 				break;
 			}
 		}
+		//TODO: Draw secondary weapon text
 		if (SecondaryWeapon)
 		{
 			Canvas->SetDrawColor(FColor::White);
@@ -269,6 +328,26 @@ void AShooterHUD::DrawWeaponHUD()
 			//weapon draw position
 			const float SecWeapPosX = Canvas->ClipX - Canvas->OrgX - ((SecWeaponBoxWidth + SecondaryWeapon->SecondaryIcon.UL) / 2.0f + 2 * Offset) * ScaleUI;
 			const float SecWeapPosY =  Canvas->ClipY - Canvas->OrgY - (SecWeapOffsetY + (SecondaryWeapBg.VL + SecondaryWeapon->SecondaryIcon.VL) / 2.0f + Offset) * ScaleUI;
+
+			//John
+			//Secondary Weapon Text
+
+			const float SecWeapTextOffsetX = 150;
+			const float SecWeapTextOffsetY = 125;
+
+			FString SecWeaponText = FString();
+			SecWeaponText = SecondaryWeapon->Tags[0].ToString();
+
+			Canvas->TextSize(NormalFont, SecWeaponText, TextXL, TextYL, ScaleUI, ScaleUI);
+
+			const float SecWeapTextPosX = Canvas->ClipX - Canvas->OrgX - ((SecWeapTextOffsetX + TextXL) / 2.0f + 2 * Offset) * ScaleUI;
+			const float SecWeapTextPosY = Canvas->ClipY - Canvas->OrgY - ((SecWeapOffsetY + SecWeapTextOffsetY + TextYL) / 2.0f + Offset) * ScaleUI;
+
+			Canvas->SetDrawColor(HUDDark);
+			//Draw the weapon name
+			Canvas->DrawText(NormalFont, SecWeaponText, SecWeapTextPosX, SecWeapTextPosY, ScaleUI, ScaleUI, ShadowedFont);
+
+			Canvas->SetDrawColor(FColor::White);
 
 			//secondary clip draw position
 			const float SecClipWidth = SecondaryWeapon->SecondaryClipIcon.UL +  SecondaryWeapon->SecondaryClipIconOffset * (SecondaryWeapon->AmmoIconsCount-1);

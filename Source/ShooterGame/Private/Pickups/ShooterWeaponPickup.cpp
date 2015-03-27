@@ -72,26 +72,6 @@ void AShooterWeaponPickup::Interact(class AActor* Interactor)
 	}
 	else
 	{
-		////if the player's inventory is not full
-		//if (!(PickupPawn->InventoryFull()))
-		//{
-		//	//give the weapon to the player
-		//	PickupPawn->AddWeapon(WeaponPickup);
-
-		//	//player equips the weapon
-		//	PickupPawn->EquipWeapon(WeaponPickup);
-
-		//	//If this pickup was spawned by a ShooterWeaponPickupSpawn
-		//	if (this->PickupSpawn)
-		//	{
-		//		//Notify its spawn that it has been taken.
-		//		PickupSpawn->OnPickupTaken();
-		//		PickupSpawn = NULL;
-		//	}
-
-		//	//this pickup is now gone
-		//	this->Destroy();
-		//}
 
 		if (PickupPawn->InventoryFull())
 		{
