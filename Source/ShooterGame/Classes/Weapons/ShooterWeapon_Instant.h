@@ -69,6 +69,8 @@ struct FInstantWeaponData
 	UPROPERTY(EditDefaultsOnly, Category = LocationalDamage)
 	int32 LowTargetHealthHeadshotMod;
 
+	
+
 	/** defaults */
 	FInstantWeaponData()
 	{

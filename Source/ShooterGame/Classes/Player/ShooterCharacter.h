@@ -100,6 +100,24 @@ class AShooterCharacter : public ACharacter
 
 	void Interact();
 
+	//John
+	void StartQuickFire(AShooterWeapon* QuickFireWeapon);
+
+	void QuickFire();
+
+	void FinishQuickFire();
+
+	//temp storage for QuickFire weapon
+	AShooterWeapon* QuickFiringWeapon;
+
+	FTimerHandle  TimerHandle_QuickFire;
+
+	FTimerHandle TimerHandle_FinishQuickFire;
+
+	AShooterWeapon* PrevWeapon;
+
+	bool IsQuickFiring();
+
 	//////////////////////////////////////////////////////////////////////////
 	// Weapon usage
 
@@ -120,7 +138,6 @@ class AShooterCharacter : public ACharacter
 
 	//////////////////////////////////////////////////////////////////////////
 	// Movement
-	/** socket or bone name for attaching weapon mesh */
 
 	/*John*/
 	/*whether or not the character can run (sprint)*/
@@ -194,12 +211,28 @@ class AShooterCharacter : public ACharacter
 	/** player pressed prev weapon action */
 	void OnPrevWeapon();
 
+	/** Player is equipping a weapon*/
+	void OnEquipWeapon(AShooterWeapon* Weapon);
+
+	/** player pressed switch weapon action*/
+	void OnSwitchWeapon();
+
 	//John
 	/**Player pressed drop weapon action*/
 	void OnDropWeapon();
 
 	/**Player pressed interact action*/
 	void OnInteract();
+
+	//John
+	/**Player pressed throw frag grenade action key*/
+	void OnThrowFragGrenade();
+
+	/**Player pressed throw sticky grenade action key*/
+	void OnThrowStickyGrenade();
+
+	/**Player pressed melee action key*/
+	void OnMelee();
 
 	/** player pressed reload action */
 	void OnReload();
@@ -218,7 +251,6 @@ class AShooterCharacter : public ACharacter
 
 	/** player released run action */
 	void OnStopRunning();
-
 
 	//////////////////////////////////////////////////////////////////////////
 	// Reading data
@@ -295,6 +327,10 @@ class AShooterCharacter : public ACharacter
 
 	bool InventoryFull();
 
+	///** get the originating location for quick fire damage */
+	//FVector GetQuickFireOrigin();
+
+	//bool bQuickFiring;
 
 private:
 
@@ -304,6 +340,12 @@ private:
 protected:
 
 	//John
+	/** trigger start weapon fire from server */
+	UFUNCTION(reliable, client)
+	void ClientStartWeaponFire();
+
+	UFUNCTION(reliable, client)
+		void ClientStopWeaponFire();
 
 	/**The object the player is currently pointing at*/
 	AActor* PointingAtObject;
@@ -334,6 +376,19 @@ protected:
 	/** weapons in inventory */
 	UPROPERTY(Transient, Replicated)
 	TArray<class AShooterWeapon*> Inventory;
+
+	//John
+	/** Melee weapon*/
+	UPROPERTY(EditDefaultsOnly, Category=Inventory)
+		TSubclassOf<class AShooterWeapon> Melee;
+
+	/** Frag Grenade*/
+	UPROPERTY(EditDefaultsOnly, Category=Inventory)
+		TSubclassOf<class AShooterWeapon> FragGrenade;
+
+	/** Sticky Grenade*/
+	UPROPERTY(EditDefaultsOnly, Category = Inventory)
+		TSubclassOf<class AShooterWeapon> StickyGrenade;
 
 	UPROPERTY(EditDefaultsOnly, Category = Inventory)
 	int32 MaxInventory;
@@ -375,6 +430,12 @@ protected:
 
 	/** current firing state */
 	uint8 bWantsToFire : 1;
+
+	/** currently throwing grenade */
+	bool bThrowingGrenade;
+
+	/** currently quickfiring */
+	bool bQuickFiring;
 
 	/** when low health effects should start */
 	float LowHealthPercentage;
@@ -580,9 +641,6 @@ protected:
 	///** Interact*/
 	UFUNCTION(reliable, server, WithValidation)
 	void ServerInteract();
-
-	/*UFUNCTION(NetMulticast, reliable)
-	void ClientInteract();*/
 
 	/** update targeting state */
 	UFUNCTION(reliable, server, WithValidation)

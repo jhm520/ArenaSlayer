@@ -128,7 +128,6 @@ void AShooterHUD::DrawInteract()
 	AShooterPlayerState* MyPlayerState = Cast<AShooterPlayerState>(MyPC->PlayerState);
 
 	AActor* PointingAtObject = NULL;
-	
 
 	if (MyPawn->CanInteract(&PointingAtObject))
 	{
@@ -223,6 +222,7 @@ void AShooterHUD::DrawWeaponHUD()
 
 		Canvas->SetDrawColor(HUDDark);
 		//Draw the weapon name
+
 		Canvas->DrawText(NormalFont, PriWeaponText, PriWeapPosX-PriWeapTextOffsetX, PriWeapPosY-PriWeapTextOffsetY, ScaleUI*1.5, ScaleUI*1.5, ShadowedFont);
 
 		Canvas->SetDrawColor(FColor::White);
@@ -801,7 +801,7 @@ void AShooterHUD::DrawCrosshair()
 					CurrentCrosshair[i] = &Crosshair[i];
 				}
 			}
-
+			//Draw laser dot
 			if (Pawn->IsTargeting() && MyWeapon->UseLaserDot)
 			{
 				Canvas->SetDrawColor(255,0,0,192);
@@ -809,8 +809,15 @@ void AShooterHUD::DrawCrosshair()
 					CenterX - (*CurrentCrosshair[EShooterCrosshairDirection::Center]).UL*ScaleUI / 2.0f,
 					CenterY - (*CurrentCrosshair[EShooterCrosshairDirection::Center]).VL*ScaleUI / 2.0f, ScaleUI);
 			}
+			//Draw regular crosshair
 			else
 			{
+				FColor PrevColor = Canvas->DrawColor;
+
+				if (MyWeapon->CanHit())
+				{
+					Canvas->SetDrawColor(FColor::Red);
+				}
 				Canvas->DrawIcon(*CurrentCrosshair[EShooterCrosshairDirection::Center], 
 					CenterX - (*CurrentCrosshair[EShooterCrosshairDirection::Center]).UL*ScaleUI / 2.0f, 
 					CenterY - (*CurrentCrosshair[EShooterCrosshairDirection::Center]).VL*ScaleUI / 2.0f, ScaleUI);
@@ -828,6 +835,8 @@ void AShooterHUD::DrawCrosshair()
 				Canvas->DrawIcon(*CurrentCrosshair[EShooterCrosshairDirection::Bottom],
 					CenterX - (*CurrentCrosshair[EShooterCrosshairDirection::Bottom]).UL * ScaleUI / 2.0f,
 					CenterY + CrossSpread * ScaleUI, ScaleUI);
+
+				Canvas->SetDrawColor(PrevColor);
 			}
 
 			if (CurrentTime - LastEnemyHitTime >= 0 && CurrentTime - LastEnemyHitTime <= LastEnemyHitDisplayTime)

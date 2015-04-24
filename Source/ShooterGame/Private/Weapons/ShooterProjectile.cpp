@@ -35,22 +35,165 @@ AShooterProjectile::AShooterProjectile(const FObjectInitializer& ObjectInitializ
 	SetRemoteRoleForBackwardsCompat(ROLE_SimulatedProxy);
 	bReplicates = true;
 	bReplicateMovement = true;
+
+	SpawnTime = 0.0f;
+
+	BounceTime = 0.0f;
+
+	bBounced = false;
+	bStuck = false;
+
+	StuckActor = NULL;
 }
+
 
 void AShooterProjectile::PostInitializeComponents()
 {
 	Super::PostInitializeComponents();
-	MovementComp->OnProjectileStop.AddDynamic(this, &AShooterProjectile::OnImpact);
+
 	CollisionComp->MoveIgnoreActors.Add(Instigator);
 
+	//Get the weapon config
 	AShooterWeapon_Projectile* OwnerWeapon = Cast<AShooterWeapon_Projectile>(GetOwner());
 	if (OwnerWeapon)
 	{
 		OwnerWeapon->ApplyWeaponConfig(WeaponConfig);
 	}
 
+	if (WeaponConfig.ExplodeTime > 0.0f)
+	{
+		//Do something
+	}
+	else if (WeaponConfig.ExplodeOnStop)
+	{
+		//Projectile will explode when it stops moving
+		MovementComp->OnProjectileStop.AddDynamic(this, &AShooterProjectile::OnImpact);
+	}
+
+	//Projectile will explode after a set timer
+	//GetWorldTimerManager().SetTimer(TimerHandle_OnImpact, this, &AShooterProjectile::OnImpact, WeaponConfig.ExplodeTime, false);
+	if (WeaponConfig.ExplodeTimeAfterBounce > 0.0f)
+	{
+		
+	}
+	if (MovementComp->bShouldBounce)
+	{
+		MovementComp->OnProjectileBounce.AddDynamic(this, &AShooterProjectile::OnBounce);
+	}
+
+	SpawnTime = GetWorld()->GetTimeSeconds();
+
 	SetLifeSpan( WeaponConfig.ProjectileLife );
 	MyController = GetInstigatorController();
+}
+
+void AShooterProjectile::OnBounce(const FHitResult& ImpactResult, const FVector& ImpactVelocity)
+{
+	if (WeaponConfig.ExplodeTimeAfterBounce > 0.0f)
+	{
+		if (!bBounced)
+		{
+			bBounced = true;
+			BounceTime = GetWorld()->GetTimeSeconds();
+		}
+	}                                  
+}
+
+void AShooterProjectile::Stick(UPrimitiveComponent * MyComp, UPrimitiveComponent * OtherComp, bool bSelfMoved, FHitResult const & Hit)
+{
+	if (Role == ROLE_Authority)
+	{
+		ClientStick(MyComp, OtherComp, bSelfMoved, Hit);
+	}
+
+	bStuck = true;
+	MovementComp->StopMovementImmediately();
+	MovementComp->bShouldBounce = 0;
+	MovementComp->ProjectileGravityScale = 0;
+	MyComp->AttachTo(OtherComp, Hit.BoneName, EAttachLocation::KeepWorldPosition);
+
+	StuckActor = Hit.GetActor();
+}
+
+//Use OnRep_Exploded() code to recreate OnRep_Stuck(). Use the code in that function to attach the projectile to the pawn mesh
+void AShooterProjectile::ReceiveHit(UPrimitiveComponent * MyComp, AActor * Other, UPrimitiveComponent * OtherComp,
+	bool bSelfMoved, FVector HitLocation, FVector HitNormal, FVector NormalImpulse, const FHitResult & Hit)
+{
+	if (WeaponConfig.bSticky && !bStuck && OtherComp->ComponentHasTag("Sticky"))
+	{
+		Stick(MyComp, OtherComp, bSelfMoved, Hit);
+	}
+}
+
+
+void AShooterProjectile::ClientStick_Implementation(UPrimitiveComponent * MyComp, UPrimitiveComponent * OtherComp, bool bSelfMoved, FHitResult const & Hit)
+{
+	//Replicate sticky grenade effects	
+	bStuck = true;
+	MovementComp->StopMovementImmediately();
+	MovementComp->bShouldBounce = 0;
+	MovementComp->ProjectileGravityScale = 0;
+	MyComp->AttachTo(OtherComp, Hit.BoneName, EAttachLocation::KeepWorldPosition);
+}
+
+
+bool AShooterProjectile::IsStuck()
+{
+	return WeaponConfig.bSticky && bStuck;
+}
+
+void AShooterProjectile::TriggerOnImpact()
+{
+	if (Role == ROLE_Authority)
+	{
+		FVector ProjDirection = GetActorRotation().Vector();
+
+		const FVector StartTrace = GetActorLocation() - ProjDirection * 200;
+		const FVector EndTrace = GetActorLocation() + ProjDirection * 150;
+
+		FHitResult Impact;
+
+		if (!GetWorld()->LineTraceSingle(Impact, StartTrace, EndTrace, COLLISION_PROJECTILE, FCollisionQueryParams(TEXT("ProjClient"), true, Instigator)))
+		{
+			// failsafe
+			Impact.ImpactPoint = GetActorLocation();
+			Impact.ImpactNormal = -ProjDirection;
+		}
+
+		OnImpact(Impact);
+	}
+	else
+	{
+		ServerTriggerOnImpact();
+	}
+}
+
+void AShooterProjectile::ServerTriggerOnImpact_Implementation()
+{
+	TriggerOnImpact();
+}
+
+bool AShooterProjectile::ServerTriggerOnImpact_Validate()
+{
+	return true;
+}
+
+//John
+void AShooterProjectile::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+	float CurrentTime = GetWorld()->GetTimeSeconds();
+
+	if (WeaponConfig.ExplodeTime > 0.0f && CurrentTime - SpawnTime > WeaponConfig.ExplodeTime)
+	{
+		//blow up
+		TriggerOnImpact();
+	}
+	else if (WeaponConfig.ExplodeTimeAfterBounce > 0.0f && bBounced && CurrentTime - BounceTime > WeaponConfig.ExplodeTimeAfterBounce)
+	{
+		//blow up
+		TriggerOnImpact();
+	}
 }
 
 void AShooterProjectile::InitVelocity(FVector& ShootDirection)
@@ -63,10 +206,12 @@ void AShooterProjectile::InitVelocity(FVector& ShootDirection)
 
 void AShooterProjectile::OnImpact(const FHitResult& HitResult)
 {
-	if (Role == ROLE_Authority && !bExploded)
+	if (Role == ROLE_Authority)
 	{
-		Explode(HitResult);
-		DisableAndDestroy();
+		if (!bExploded)
+		{
+			Explode(HitResult);
+		}
 	}
 }
 
@@ -82,7 +227,29 @@ void AShooterProjectile::Explode(const FHitResult& Impact)
 
 	if (WeaponConfig.ExplosionDamage > 0 && WeaponConfig.ExplosionRadius > 0 && WeaponConfig.DamageType)
 	{
-		UGameplayStatics::ApplyRadialDamage(this, WeaponConfig.ExplosionDamage, NudgedImpactLocation, WeaponConfig.ExplosionRadius, WeaponConfig.DamageType, TArray<AActor*>(), this, MyController.Get());
+		//if this projectile stuck a player
+		if (StuckActor)
+		{
+			TArray<AActor*> IgnoreActors;
+
+			IgnoreActors.Add(StuckActor);
+			UGameplayStatics::ApplyRadialDamage(this, WeaponConfig.ExplosionDamage, NudgedImpactLocation, WeaponConfig.ExplosionRadius, WeaponConfig.DamageType, IgnoreActors, this, MyController.Get());
+			FDamageEvent DamageEvent;
+			if (WeaponConfig.StuckDamage > 0)
+			{
+				
+				StuckActor->TakeDamage(WeaponConfig.StuckDamage, DamageEvent, GetInstigatorController(), GetOwner());
+			}
+			else
+			{
+				StuckActor->TakeDamage(WeaponConfig.ExplosionDamage, DamageEvent, GetInstigatorController(), GetOwner());
+			}
+		}
+		else
+		{
+			UGameplayStatics::ApplyRadialDamage(this, WeaponConfig.ExplosionDamage, NudgedImpactLocation, WeaponConfig.ExplosionRadius, WeaponConfig.DamageType, TArray<AActor*>(), this, MyController.Get());
+		}
+
 	}
 
 	if (ExplosionTemplate)
@@ -98,14 +265,30 @@ void AShooterProjectile::Explode(const FHitResult& Impact)
 	}
 
 	bExploded = true;
+
+	//John
+	//PutDisableAndDestroy call here to correct replication issues
+	DisableAndDestroy();
 }
 
 void AShooterProjectile::DisableAndDestroy()
 {
 	UAudioComponent* ProjAudioComp = FindComponentByClass<UAudioComponent>();
+
+	UStaticMeshComponent* ProjStaticMeshComp = FindComponentByClass<UStaticMeshComponent>();
+
 	if (ProjAudioComp && ProjAudioComp->IsPlaying())
 	{
 		ProjAudioComp->FadeOut(0.1f, 0.f);
+	}
+
+	if (ProjStaticMeshComp)
+	{
+		/*if (GEngine)
+		{
+			GEngine->AddOnScreenDebugMessage(-1, 0.5f, FColor::Yellow, FString(TEXT("StaticMeshComponent destroyed.")));
+		}*/
+		ProjStaticMeshComp->DestroyComponent();
 	}
 
 	MovementComp->StopMovementImmediately();
@@ -147,4 +330,5 @@ void AShooterProjectile::GetLifetimeReplicatedProps( TArray< FLifetimeProperty >
 	Super::GetLifetimeReplicatedProps( OutLifetimeProps );
 	
 	DOREPLIFETIME( AShooterProjectile, bExploded );
+
 }

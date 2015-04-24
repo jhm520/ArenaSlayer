@@ -43,6 +43,11 @@ void AShooterWeaponPickup::AttachSpawn(AShooterWeaponPickupSpawn* Spawn)
 	PickupSpawn = Spawn;
 }
 
+void AShooterWeaponPickup::ReceiveActorBeginOverlap(AActor* OtherActor)
+{
+
+}
+
 //John
 //	Use the WeaponPickup as the pointer. It always has an instance of a weapon attached to it,
 //	so it shouldn't ever reset its transient properties. Try just using
@@ -73,8 +78,8 @@ void AShooterWeaponPickup::Interact(class AActor* Interactor)
 	else
 	{
 
-		if (PickupPawn->InventoryFull())
-		{
+		if (PickupPawn->InventoryFull() && !WeaponPickup->IsExtraWeapon())
+		{  
 			PickupPawn->DropWeapon();
 		}
 
@@ -82,10 +87,14 @@ void AShooterWeaponPickup::Interact(class AActor* Interactor)
 		PickupPawn->AddWeapon(WeaponPickup);
 
 		//player equips the weapon
-		PickupPawn->EquipWeapon(WeaponPickup);
+		//unless it is an extra weapon (grenade)
+		if (!WeaponPickup->IsExtraWeapon())
+		{
+			PickupPawn->EquipWeapon(WeaponPickup);
+		}
 
 		//If this pickup was spawned by a ShooterWeaponPickupSpawn
-		if (this->PickupSpawn)
+		if (PickupSpawn)
 		{
 			//Notify its spawn that it has been taken.
 			PickupSpawn->OnPickupTaken();

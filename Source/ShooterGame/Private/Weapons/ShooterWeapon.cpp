@@ -50,6 +50,8 @@ AShooterWeapon::AShooterWeapon(const FObjectInitializer& ObjectInitializer) : Su
 	BurstDuration = 0.0f;
 	bBurstPausing = false;
 
+	//bQuickFiring = false;
+
 	/*End John*/
 
 	PrimaryActorTick.bCanEverTick = true;
@@ -67,7 +69,18 @@ void AShooterWeapon::PostInitializeComponents()
 	if (WeaponConfig.InitialClips > 0)
 	{
 		CurrentAmmoInClip = WeaponConfig.AmmoPerClip;
-		CurrentAmmo = WeaponConfig.AmmoPerClip * WeaponConfig.InitialClips;
+
+
+		//John
+		if (WeaponConfig.bNeedsReload)
+		{
+			CurrentAmmo = WeaponConfig.AmmoPerClip * WeaponConfig.InitialClips;
+		}
+		else
+		{
+			CurrentAmmo = CurrentAmmoInClip;
+			WeaponConfig.MaxAmmo = WeaponConfig.AmmoPerClip;
+		}
 	}
 
 	//John
@@ -92,21 +105,43 @@ void AShooterWeapon::Destroyed()
 
 void AShooterWeapon::OnEquip()
 {
-	AttachMeshToPawn();
 
+	AttachMeshToPawn();
+	
 	bPendingEquip = true;
 	DetermineWeaponState();
 
 	float Duration = PlayWeaponAnimation(EquipAnim);
-	if (Duration <= 0.0f)
+	//if (Duration <= 0.0f)
+	//{
+	//	// failsafe
+	//	Duration = 0.5f;
+	//}
+
+	if (WeaponConfig.AltEquipDuration > 0.0f)
 	{
-		// failsafe
-		Duration = 0.5f;
+		Duration = WeaponConfig.AltEquipDuration;
 	}
-	EquipStartedTime = GetWorld()->GetTimeSeconds();
+	
+	//John
+	//I made it so weapons can have no equip animation so you can use them instantly.
+	if (Duration > 0.0f)
+	{
+
+		EquipStartedTime = GetWorld()->GetTimeSeconds();
+		EquipDuration = Duration;
+
+		GetWorldTimerManager().SetTimer(TimerHandle_OnEquipFinished, this, &AShooterWeapon::OnEquipFinished, Duration, false);
+	}
+	else
+	{
+		EquipDuration = 0.0;
+		OnEquipFinished();
+	}
+	/*EquipStartedTime = GetWorld()->GetTimeSeconds();
 	EquipDuration = Duration;
 
-	GetWorldTimerManager().SetTimer(TimerHandle_OnEquipFinished, this, &AShooterWeapon::OnEquipFinished, Duration, false);
+	GetWorldTimerManager().SetTimer(TimerHandle_OnEquipFinished, this, &AShooterWeapon::OnEquipFinished, Duration, false);*/
 
 	if (MyPawn && MyPawn->IsLocallyControlled())
 	{
@@ -116,10 +151,23 @@ void AShooterWeapon::OnEquip()
 
 void AShooterWeapon::OnEquipFinished()
 {
+	
 	AttachMeshToPawn();
+	
 
 	bIsEquipped = true;
 	bPendingEquip = false;
+
+	/*if (MyPawn && MyPawn->IsThrowingGrenade())
+	{
+		FString YourDebugMessage = FString(TEXT("Finished throwing grenade."));
+
+		if (GEngine)
+		{
+			GEngine->AddOnScreenDebugMessage(-1, 0.5f, FColor::Yellow, YourDebugMessage);
+		}
+		MyPawn->FinishThrowGrenade();
+	}*/ 
 
 	// Determine the state so that the can reload checks will work
 	DetermineWeaponState();
@@ -138,7 +186,9 @@ void AShooterWeapon::OnEquipFinished()
 
 void AShooterWeapon::OnUnEquip()
 {
+
 	DetachMeshFromPawn();
+
 	bIsEquipped = false;
 	StopFire();
 
@@ -209,7 +259,7 @@ void AShooterWeapon::AttachMeshToPawn()
 }
 
 void AShooterWeapon::DetachMeshFromPawn()
-{
+{ 
 	Mesh1P->DetachFromParent();
 	Mesh1P->SetHiddenInGame(true);
 
@@ -222,7 +272,6 @@ void AShooterWeapon::DetachMeshFromPawn()
 //////////////////////////////////////////////////////////////////////////
 // Input
 
-//TODO: Wrap all the Burst Weapon functionality into separate methods
 //This function is called when the user clicks the mouse button down
 void AShooterWeapon::StartFire()
 {
@@ -263,6 +312,65 @@ void AShooterWeapon::StopFire()
 		DetermineWeaponState();
 	}
 }
+
+////John
+//void AShooterWeapon::QuickFire()
+//{
+//	if (Role == ROLE_Authority)
+//	{
+//		bIsEquipped = true;
+//
+//		if (MyPawn && MyPawn->IsLocallyControlled())
+//		{
+//			MyPawn->bQuickFiring = true;
+//		}
+//		
+//		StartFire();
+//		StopFire();
+//		bIsEquipped = false;
+//	}
+//	else
+//	{
+//		ServerQuickFire();
+//	}
+//}
+
+//void AShooterWeapon::StartQuickFire()
+//{
+//	return;
+//}
+
+float AShooterWeapon::GetTimeBetweenShots()
+{
+	return WeaponConfig.TimeBetweenShots;
+}
+
+//void AShooterWeapon::FinishQuickFire()
+//{
+//	FString YourDebugMessage = FString(TEXT("Finished quick fire."));
+//
+//	if (GEngine)
+//	{
+//		GEngine->AddOnScreenDebugMessage(-1, 0.5f, FColor::Yellow, YourDebugMessage);
+//	}
+//
+//	if (MyPawn && MyPawn->IsLocallyControlled())
+//	{
+//		MyPawn->bQuickFiring = false;
+//	}
+//	GetWorldTimerManager().ClearTimer(TimerHandle_FinishQuickFire);
+//	return;
+//}
+
+//void AShooterWeapon::ServerQuickFire_Implementation()
+//{
+//	QuickFire();
+//}
+//
+//bool AShooterWeapon::ServerQuickFire_Validate()
+//{
+//	return true;
+//}
 
 //StartFire handler for Burst Weapons
 void AShooterWeapon::BurstWeapon_StartFire()
@@ -371,6 +479,16 @@ void AShooterWeapon::BurstWeapon_StopFire()
 	}
 }
 
+bool AShooterWeapon::IsExtraWeapon()
+{
+	return WeaponConfig.bExtraWeapon;
+}
+
+bool AShooterWeapon::IsEquippable()
+{
+	return WeaponConfig.bEquippable;
+}
+
 void AShooterWeapon::StartReload(bool bFromReplication)
 {
 	if (!bFromReplication && Role < ROLE_Authority)
@@ -472,7 +590,7 @@ bool AShooterWeapon::CanReload() const
 	bool bCanReload = (!MyPawn || MyPawn->CanReload());
 	bool bGotAmmo = (CurrentAmmoInClip < WeaponConfig.AmmoPerClip) && (CurrentAmmo - CurrentAmmoInClip > 0 || HasInfiniteClip());
 	bool bStateOKToReload = ((CurrentState == EWeaponState::Idle) || (CurrentState == EWeaponState::Firing));
-	return ((bCanReload == true) && (bGotAmmo == true) && (bStateOKToReload == true));
+	return ((bCanReload == true) && (bGotAmmo == true) && (bStateOKToReload == true) && WeaponConfig.bNeedsReload);
 }
 
 
@@ -484,6 +602,11 @@ void AShooterWeapon::GiveAmmo(int AddAmount)
 	const int32 MissingAmmo = FMath::Max(0, WeaponConfig.MaxAmmo - CurrentAmmo);
 	AddAmount = FMath::Min(AddAmount, MissingAmmo);
 	CurrentAmmo += AddAmount;
+
+	if (!WeaponConfig.bNeedsReload)
+	{
+		CurrentAmmoInClip += AddAmount;
+	}
 
 	AShooterAIController* BotAI = MyPawn ? Cast<AShooterAIController>(MyPawn->GetController()) : NULL;
 	if (BotAI)
@@ -732,10 +855,8 @@ void AShooterWeapon::OnBurstFinished()
 	bRefiring = false;
 }
 
-
 //////////////////////////////////////////////////////////////////////////
 // Weapon usage helpers
-
 UAudioComponent* AShooterWeapon::PlayWeaponSound(USoundCue* Sound)
 {
 	UAudioComponent* AC = NULL;
@@ -868,9 +989,46 @@ FHitResult AShooterWeapon::WeaponTrace(const FVector& StartTrace, const FVector&
 	TraceParams.bReturnPhysicalMaterial = true;
 
 	FHitResult Hit(ForceInit);
-	GetWorld()->LineTraceSingle(Hit, StartTrace, EndTrace, COLLISION_WEAPON, TraceParams);
+
+	if (WeaponConfig.bSphereTrace)
+	{
+		
+		FQuat TraceRotator(1,0,0,0);
+		FCollisionShape TraceShape;
+		TraceShape.SetSphere(WeaponConfig.SphereTraceRadius);
+		//TraceShape.MakeSphere(WeaponConfig.SphereTraceRadius);
+		if (GEngine)
+		{
+			GEngine->AddOnScreenDebugMessage(-1, 0.5f, FColor::Yellow, FString::SanitizeFloat(TraceShape.GetSphereRadius()));
+		}
+		GetWorld()->SweepSingle(Hit, StartTrace, EndTrace, TraceRotator, COLLISION_WEAPON, TraceShape, TraceParams);
+	}
+	else
+	{
+		GetWorld()->LineTraceSingle(Hit, StartTrace, EndTrace, COLLISION_WEAPON, TraceParams);
+	}
 
 	return Hit;
+}
+
+bool AShooterWeapon::CanHit() const
+{
+	const FVector AimDir = GetAdjustedAim();
+	const FVector StartTrace = GetCameraDamageStartLocation(AimDir);
+	const FVector EndTrace = StartTrace + AimDir * WeaponConfig.ReticuleRange;
+
+	FHitResult Hit = WeaponTrace(StartTrace, EndTrace);
+
+	if (Hit.GetActor() != NULL && Hit.GetActor()->ActorHasTag(FName(TEXT("Damageable"))) && !(Hit.GetActor()->IsRootComponentStatic() || Hit.GetActor()->IsRootComponentStationary()))
+	{
+		AShooterCharacter* HitChar = Cast<AShooterCharacter>(Hit.GetActor());
+
+		return HitChar->Health > 0;
+	}
+	else
+	{
+		return false;
+	}
 }
 
 void AShooterWeapon::SetOwningPawn(AShooterCharacter* NewOwner)

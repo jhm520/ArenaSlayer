@@ -39,6 +39,8 @@ AShooterCharacter::AShooterCharacter(const FObjectInitializer& ObjectInitializer
 	bWantsToFire = false;
 	LowHealthPercentage = 0.3f;
 
+	//bQuickFiring = false;
+
 	/*John*/
 	/*Health Regen attributes*/
 	bHealthRegen = false;
@@ -48,6 +50,11 @@ AShooterCharacter::AShooterCharacter(const FObjectInitializer& ObjectInitializer
 	LastDamageTime = 0.0;
 	LastRegenTime = 0.0;
 	StartedRegen = false;
+
+	PrevWeapon = NULL;
+	QuickFiringWeapon = NULL;
+
+	bThrowingGrenade = false;
 
 	BaseTurnRate = 45.f;
 	BaseLookUpRate = 45.f;
@@ -160,6 +167,14 @@ FVector AShooterCharacter::GetCameraAim() const
 
 	return FinalAim;
 }
+
+
+////John
+///** get the originating location for quick fire damage */
+//FVector AShooterCharacter::GetQuickFireOrigin()
+//{
+//	return GetCameraStartLocation(GetCameraAim()) + GetCameraAim()*100;
+//}
 
 //John
 /**Get camera start location*/
@@ -699,7 +714,7 @@ void AShooterCharacter::DropWeapon()
 				FActorSpawnParameters SpawnInfo;
 				SpawnInfo.bNoCollisionFail = true;
 				FVector NewLocation = GetActorLocation() + FVector(0.f, 0.f, 100.f);
-				FRotator NewRotator = FRotator::ZeroRotator;
+				FRotator NewRotator = GetActorRotation() + FRotator(0.f, -135.f, 0.f);
 
 				//Spawn new weapon pickup to match removed weapon
 				AShooterWeaponPickup* NewPickup = GetWorld()->SpawnActor<AShooterWeaponPickup>(RemovedWeapon->WeaponPickup, NewLocation, NewRotator, SpawnInfo);
@@ -734,6 +749,7 @@ void AShooterCharacter::DropWeapon()
  */
 bool AShooterCharacter::CanInteract(AActor** OutObject) const
 {
+
 	/**Get what the player is pointing at*/
 	const FVector AimDir = GetCameraAim();
 	const FVector StartTrace = GetCameraStartLocation(AimDir);
@@ -741,11 +757,33 @@ bool AShooterCharacter::CanInteract(AActor** OutObject) const
 	const FHitResult Interaction = InteractTrace(StartTrace, EndTrace);
 
 	/*The object the player is pointing at*/
-	AActor* InteractedObject = Interaction.GetActor();
+	AActor* InteractableObject = Interaction.GetActor();
 
-	*OutObject = InteractedObject;
+	*OutObject = InteractableObject;
 
-	if (InteractedObject && InteractedObject->ActorHasTag(FName(TEXT("Interact"))))
+	if (InteractableObject && InteractableObject->ActorHasTag(FName(TEXT("Interact"))))
+	{
+		return true;
+	}
+
+	/*Get all objects the player is standing on.*/
+	TArray<class AActor*> ProximityInteractableObjects;
+
+	GetOverlappingActors(ProximityInteractableObjects);
+
+	if (ProximityInteractableObjects.Num() > 0)
+	{
+		InteractableObject = ProximityInteractableObjects[0];
+	}
+
+	/*if (GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(-1, 0.5f, FColor::Yellow, FString::FromInt(ProximityInteractableObjects.Num()));
+	}*/
+
+	*OutObject = InteractableObject;
+
+	if (InteractableObject && InteractableObject->ActorHasTag(FName(TEXT("Interact"))))
 	{
 		return true;
 	}
@@ -768,7 +806,47 @@ void AShooterCharacter::Interact()
 		/*The object the player is pointing at*/
 		AActor* InteractedObject = Interaction.GetActor();
 
-		/**If this object is interactable*/
+		/**If the object the player is pointing at is interactable*/
+		if (InteractedObject && InteractedObject->ActorHasTag(FName(TEXT("Interact"))))
+		{
+			FPointDamageEvent PointDmg;
+			PointDmg.DamageTypeClass = NULL;
+			PointDmg.HitInfo = Interaction;
+			PointDmg.ShotDirection = FVector(0.0);
+			PointDmg.Damage = 0.0;
+
+			APlayerController* PC = Cast<APlayerController>(Controller);
+
+			/**Call TakeDamage with 0 damage,
+			which will serve as an interaction
+			Consider trying to find a different function
+			to perform interaction
+
+			in this case, TakeDamage will place
+			the weapon in the user's inventory*/
+			InteractedObject->TakeDamage(0.0, PointDmg, PC, this);
+			return;
+		}
+
+		/**	If the function hasn't returned yet, that means the player wasn't pointing at an interactable object.
+		 *	Now we will detect proximity interactable objects
+		 */
+
+		TArray<class AActor*> ProximityInteractableObjects;
+
+		/*Get all objects the player is standing on.*/
+		GetOverlappingActors(ProximityInteractableObjects);
+
+		if (ProximityInteractableObjects.Num() > 0)
+		{
+			InteractedObject = ProximityInteractableObjects[0];
+		}
+
+		/*if (GEngine)
+		{
+		GEngine->AddOnScreenDebugMessage(-1, 0.5f, FColor::Yellow, FString::FromInt(ProximityInteractableObjects.Num()));
+		}*/
+
 		if (InteractedObject && InteractedObject->ActorHasTag(FName(TEXT("Interact"))))
 		{
 			FPointDamageEvent PointDmg;
@@ -795,6 +873,64 @@ void AShooterCharacter::Interact()
 	}
 }
 
+void AShooterCharacter::ClientStartWeaponFire_Implementation()
+{
+	StartWeaponFire();
+}
+
+void AShooterCharacter::ClientStopWeaponFire_Implementation()
+{
+	StopWeaponFire();
+}
+
+//John
+void AShooterCharacter::StartQuickFire(AShooterWeapon* QuickFireWeapon)
+{
+	if (!bQuickFiring)
+	{
+		bQuickFiring = true;
+
+		PrevWeapon = CurrentWeapon;
+
+		OnEquipWeapon(QuickFireWeapon);
+
+		SetCurrentWeapon(QuickFireWeapon);
+
+		QuickFiringWeapon = QuickFireWeapon;
+
+		float TimeOffset = 0.01;
+		GetWorldTimerManager().SetTimer(TimerHandle_QuickFire, this,
+			&AShooterCharacter::QuickFire, QuickFireWeapon->GetEquipDuration() + TimeOffset, false);
+	}
+}
+
+void AShooterCharacter::QuickFire()
+{
+	bWantsToFire = false;
+	bQuickFiring = false;
+	StartWeaponFire();
+	StopWeaponFire();
+	bQuickFiring = true;
+	OnEquipWeapon(PrevWeapon);
+	SetCurrentWeapon(PrevWeapon);
+	PrevWeapon = NULL;
+
+	GetWorldTimerManager().SetTimer(TimerHandle_FinishQuickFire, this,
+		&AShooterCharacter::FinishQuickFire, QuickFiringWeapon->GetTimeBetweenShots(), false);
+
+	QuickFiringWeapon = NULL;
+}
+
+void AShooterCharacter::FinishQuickFire()
+{
+	bQuickFiring = false;
+}
+
+bool AShooterCharacter::IsQuickFiring()
+{
+	return bQuickFiring;
+}
+
 int32 AShooterCharacter::GetMaxInventory()
 {
 	return MaxInventory;
@@ -802,7 +938,18 @@ int32 AShooterCharacter::GetMaxInventory()
 
 bool AShooterCharacter::InventoryFull()
 {
-	return Inventory.Num() >= GetMaxInventory();
+
+	int32 NumWeapons = 0;
+
+	for (int32 i = 0; i < Inventory.Num(); i++)
+	{
+		if (!Inventory[i]->IsExtraWeapon())
+		{
+			NumWeapons++;
+		}
+	}
+
+	return NumWeapons >= GetMaxInventory();
 }
 
 void AShooterCharacter::SpawnDefaultInventory()
@@ -813,6 +960,7 @@ void AShooterCharacter::SpawnDefaultInventory()
 	}
 
 	int32 NumWeaponClasses = DefaultInventoryClasses.Num();
+	
 	for (int32 i = 0; i < NumWeaponClasses; i++)
 	{
 		if (DefaultInventoryClasses[i])
@@ -821,7 +969,9 @@ void AShooterCharacter::SpawnDefaultInventory()
 			SpawnInfo.bNoCollisionFail = true;
 			AShooterWeapon* NewWeapon = GetWorld()->SpawnActor<AShooterWeapon>(DefaultInventoryClasses[i], SpawnInfo);
 			AddWeapon(NewWeapon);
+
 		}
+
 	}
 
 	// equip first weapon in inventory
@@ -982,11 +1132,15 @@ void AShooterCharacter::SetCurrentWeapon(class AShooterWeapon* NewWeapon, class 
 
 void AShooterCharacter::StartWeaponFire()
 {
-	if (!bWantsToFire)
+	if (!bWantsToFire && !bThrowingGrenade)
 	{
 		bWantsToFire = true;
 		if (CurrentWeapon)
 		{
+			//if (GEngine)
+			//{
+			//	GEngine->AddOnScreenDebugMessage(-1, 0.5f, FColor::Yellow, CurrentWeapon->Tags[0].ToString());
+			//}
 			CurrentWeapon->StartFire();
 		}
 	}
@@ -1018,6 +1172,7 @@ void AShooterCharacter::SetTargeting(bool bNewTargeting)
 {
 	bIsTargeting = bNewTargeting;
 
+	//John
 	if (TargetingSound)
 	{
 		UGameplayStatics::PlaySoundAttached(TargetingSound, GetRootComponent());
@@ -1152,12 +1307,18 @@ void AShooterCharacter::SetupPlayerInputComponent(class UInputComponent* InputCo
 	InputComponent->BindAction("Targeting", IE_Pressed, this, &AShooterCharacter::OnStartTargeting);
 	InputComponent->BindAction("Targeting", IE_Released, this, &AShooterCharacter::OnStopTargeting);
 
-	InputComponent->BindAction("NextWeapon", IE_Pressed, this, &AShooterCharacter::OnNextWeapon);
-	InputComponent->BindAction("PrevWeapon", IE_Pressed, this, &AShooterCharacter::OnPrevWeapon);
+	InputComponent->BindAction("NextWeapon", IE_Pressed, this, &AShooterCharacter::OnSwitchWeapon);
+	InputComponent->BindAction("PrevWeapon", IE_Pressed, this, &AShooterCharacter::OnSwitchWeapon);
 
+	//John
 	InputComponent->BindAction("DropWeapon", IE_Pressed, this, &AShooterCharacter::OnDropWeapon);
 
 	InputComponent->BindAction("Interact", IE_Pressed, this, &AShooterCharacter::OnInteract);
+
+	InputComponent->BindAction("ThrowFragGrenade", IE_Pressed, this, &AShooterCharacter::OnThrowFragGrenade);
+	InputComponent->BindAction("ThrowStickyGrenade", IE_Pressed, this, &AShooterCharacter::OnThrowStickyGrenade);
+
+	InputComponent->BindAction("Melee", IE_Pressed, this, &AShooterCharacter::OnMelee);
 
 	InputComponent->BindAction("Reload", IE_Pressed, this, &AShooterCharacter::OnReload);
 
@@ -1220,15 +1381,19 @@ void AShooterCharacter::LookUpAtRate(float Val)
 
 void AShooterCharacter::OnStartFire()
 {
-	AShooterPlayerController* MyPC = Cast<AShooterPlayerController>(Controller);
-	if (MyPC && MyPC->IsGameInputAllowed())
-	{
-		if (IsRunning())
+	/*if (!bQuickFiring)
+	{*/
+		AShooterPlayerController* MyPC = Cast<AShooterPlayerController>(Controller);
+		if (MyPC && MyPC->IsGameInputAllowed())
 		{
-			SetRunning(false, false);
+			if (IsRunning())
+			{
+				SetRunning(false, false);
+			}
+			StartWeaponFire();
 		}
-		StartWeaponFire();
-	}
+	//}
+	
 }
 
 void AShooterCharacter::OnStopFire()
@@ -1282,6 +1447,42 @@ void AShooterCharacter::OnPrevWeapon()
 	}
 }
 
+void AShooterCharacter::OnEquipWeapon(AShooterWeapon* Weapon)
+{
+	AShooterPlayerController* MyPC = Cast<AShooterPlayerController>(Controller);
+	if (MyPC && MyPC->IsGameInputAllowed())
+	{
+		if (CurrentWeapon == NULL || CurrentWeapon->GetCurrentState() != EWeaponState::Equipping)
+		{
+			EquipWeapon(Weapon);
+			/*if (GEngine)
+			{
+				GEngine->AddOnScreenDebugMessage(-1, 0.5f, FColor::Yellow, FString(TEXT("Equipped")));
+			}*/
+		}
+	}
+}
+
+void AShooterCharacter::OnSwitchWeapon()
+{
+	AShooterPlayerController* MyPC = Cast<AShooterPlayerController>(Controller);
+	if (MyPC && MyPC->IsGameInputAllowed())
+	{
+		if (Inventory.Num() >= 2 && (CurrentWeapon == NULL || CurrentWeapon->GetCurrentState() != EWeaponState::Equipping))
+		{
+			int32 CurrentWeaponIdx = Inventory.IndexOfByKey(CurrentWeapon);
+			AShooterWeapon* NextWeapon = Inventory[(CurrentWeaponIdx = CurrentWeaponIdx + 1) % Inventory.Num()];
+
+			while (!NextWeapon->IsEquippable())
+			{
+				NextWeapon = Inventory[(CurrentWeaponIdx = CurrentWeaponIdx + 1) % Inventory.Num()];
+			}
+
+			EquipWeapon(NextWeapon);
+		}
+	}
+}
+
 //John
 void AShooterCharacter::OnDropWeapon()
 {
@@ -1302,6 +1503,60 @@ void AShooterCharacter::OnInteract()
 	if (MyPC && MyPC->IsGameInputAllowed())
 	{
 		Interact();
+	}
+}
+
+void AShooterCharacter::OnThrowFragGrenade()
+{
+	AShooterPlayerController* MyPC = Cast<AShooterPlayerController>(Controller);
+	if (MyPC && MyPC->IsGameInputAllowed())
+	{
+		AShooterWeapon* FragGrenadeWeapon = NULL;
+		if (FragGrenade)
+		{
+			FragGrenadeWeapon = FindWeapon(FragGrenade);
+		}
+
+		if (FragGrenadeWeapon && FragGrenadeWeapon->GetCurrentAmmo() > 0)
+		{
+			StartQuickFire(FragGrenadeWeapon);
+		}
+	}
+}
+
+void AShooterCharacter::OnThrowStickyGrenade()
+{
+	AShooterPlayerController* MyPC = Cast<AShooterPlayerController>(Controller);
+	if (MyPC && MyPC->IsGameInputAllowed())
+	{
+		AShooterWeapon* StickyGrenadeWeapon = NULL;
+		if (StickyGrenade)
+		{
+			StickyGrenadeWeapon = FindWeapon(StickyGrenade);
+		}
+
+		if (StickyGrenadeWeapon && StickyGrenadeWeapon->GetCurrentAmmo() > 0)
+		{
+			StartQuickFire(StickyGrenadeWeapon);
+		}
+	}
+}
+
+void AShooterCharacter::OnMelee()
+{
+	AShooterPlayerController* MyPC = Cast<AShooterPlayerController>(Controller);
+	if (MyPC && MyPC->IsGameInputAllowed())
+	{
+		AShooterWeapon* MeleeWeapon = NULL;
+		if (Melee)
+		{
+			MeleeWeapon = FindWeapon(Melee);
+		}
+
+		if (MeleeWeapon && MeleeWeapon->GetCurrentAmmo() > 0)
+		{
+			StartQuickFire(MeleeWeapon);
+		}
 	}
 }
 

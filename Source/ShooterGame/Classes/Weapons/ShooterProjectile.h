@@ -20,6 +20,13 @@ class AShooterProjectile : public AActor
 	UFUNCTION()
 	void OnImpact(const FHitResult& HitResult);
 
+	/** handle bounce*/
+	UFUNCTION()
+	void OnBounce(const FHitResult& ImpactResult, const FVector& ImpactVelocity);
+
+	/** Get whether or not this projectile is stuck */
+	bool IsStuck();
+
 private:
 	/** movement component */
 	UPROPERTY(VisibleDefaultsOnly, Category=Projectile)
@@ -59,6 +66,46 @@ protected:
 
 	/** update velocity on client */
 	virtual void PostNetReceiveVelocity(const FVector& NewVelocity) override;
+
+	//John
+	/** TimerHandle for blowing up this projectile*/
+	FTimerHandle TimerHandle_OnImpact;
+
+	/** Trigger explosion manually*/
+	void TriggerOnImpact();
+
+	///** Server Trigger explosion*/
+	UFUNCTION(reliable, server, WithValidation)
+	void ServerTriggerOnImpact();
+
+	/** Time of being shot*/
+	float SpawnTime;
+
+	//John
+	/** Tick down the explode timer. Haha, tick. Like, literally a ticking bomb. =D*/
+	virtual void Tick(float DeltaSeconds) override;
+
+	/** if this projectile has bounced*/
+	bool bBounced;
+
+	/** time since last bounce*/
+	float BounceTime;
+
+	/** If this projectile is stuck to a target*/
+	bool bStuck;
+
+	virtual void ReceiveHit(UPrimitiveComponent * MyComp, AActor * Other, UPrimitiveComponent * OtherComp,
+		bool bSelfMoved, FVector HitLocation, FVector HitNormal, FVector NormalImpulse, const FHitResult & Hit) override;
+
+	UFUNCTION(Client, Reliable)
+		void ClientStick(UPrimitiveComponent * MyComp, UPrimitiveComponent * OtherComp, bool bSelfMoved, FHitResult const & Hit);
+
+	/** Sticks this projectile to the target*/
+	void Stick(UPrimitiveComponent * MyComp, UPrimitiveComponent * OtherComp, bool bSelfMoved, FHitResult const & Hit);
+
+	/** The actor this projectile is stuck to */
+	AActor* StuckActor;
+	
 
 protected:
 	/** Returns MovementComp subobject **/

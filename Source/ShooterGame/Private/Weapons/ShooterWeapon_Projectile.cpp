@@ -11,6 +11,7 @@ AShooterWeapon_Projectile::AShooterWeapon_Projectile(const FObjectInitializer& O
 
 void AShooterWeapon_Projectile::FireWeapon()
 {
+
 	FVector ShootDir = GetAdjustedAim();
 	FVector Origin = GetMuzzleLocation();
 
@@ -58,7 +59,6 @@ void AShooterWeapon_Projectile::FireWeapon()
 			ShootDir = AdjustedDir;
 		}
 	}
-
 	ServerFireProjectile(Origin, ShootDir);
 }
 

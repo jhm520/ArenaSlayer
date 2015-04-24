@@ -17,6 +17,28 @@ struct FProjectileWeaponData
 	UPROPERTY(EditDefaultsOnly, Category=Projectile)
 	float ProjectileLife;
 
+	//John
+	/** Explode timer*/
+	UPROPERTY(EditDefaultsOnly, Category = Projectile)
+	float ExplodeTime;
+	/** life time after bounce */
+	UPROPERTY(EditDefaultsOnly, Category = Projectile)
+	float ExplodeTimeAfterBounce;
+
+	/** Will this grenade explode when it's velocity is zero? */
+	UPROPERTY(EditDefaultsOnly, Category = Projectile)
+	bool ExplodeOnStop;
+
+	/** Will this grenade stick to stickable objects? */
+	UPROPERTY(EditDefaultsOnly, Category = Projectile)
+	bool bSticky;
+
+	/** damage to stuck target */
+	UPROPERTY(EditDefaultsOnly, Category = Projectile)
+	int32 StuckDamage;
+
+	//End John
+
 	/** damage at impact point */
 	UPROPERTY(EditDefaultsOnly, Category=WeaponStat)
 	int32 ExplosionDamage;
@@ -29,14 +51,20 @@ struct FProjectileWeaponData
 	UPROPERTY(EditDefaultsOnly, Category=WeaponStat)
 	TSubclassOf<UDamageType> DamageType;
 
+
 	/** defaults */
 	FProjectileWeaponData()
 	{
 		ProjectileClass = NULL;
 		ProjectileLife = 10.0f;
+		ExplodeTime = 0.0;
+		ExplodeTimeAfterBounce = 0.0f;
 		ExplosionDamage = 100;
 		ExplosionRadius = 300.0f;
+		ExplodeOnStop = true;
+		bSticky = false;
 		DamageType = UDamageType::StaticClass();
+		StuckDamage = 100;
 	}
 };
 

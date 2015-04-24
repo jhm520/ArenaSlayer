@@ -51,6 +51,8 @@ public:
 
 	void AttachSpawn(AShooterWeaponPickupSpawn* Spawn);
 
+	virtual void ReceiveActorBeginOverlap(AActor* OtherActor) override;
+
 
 protected:
 	void Interact(class AActor* Interactor);

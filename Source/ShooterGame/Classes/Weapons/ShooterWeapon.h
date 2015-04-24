@@ -49,7 +49,6 @@ struct FWeaponData
 
 	/* John's code */
 	/*if this weapon is a burst/semi-automatic weapon*/
-	/*Semi auto is a 1 shot burst*/
 	UPROPERTY(EditDefaultsOnly, Category = WeaponStat)
 		bool bBurstWeapon;
 
@@ -60,6 +59,33 @@ struct FWeaponData
 	/*time delay between bursts*/
 	UPROPERTY(EditDefaultsOnly, Category = WeaponStat)
 		float TimeBetweenBursts;
+
+	/*if this weapon can be picked up when the player's inventory is full*/
+	UPROPERTY(EditDefaultsOnly, Category = WeaponStat)
+		bool bExtraWeapon;
+
+	/* if this weapon can be equipped*/
+	UPROPERTY(EditDefaultsOnly, Category = WeaponStat)
+		bool bEquippable;
+
+	/** if this weapon needs to reload*/
+	UPROPERTY(EditDefaultsOnly, Category = WeaponStat)
+		bool bNeedsReload;
+
+	UPROPERTY(EditDefaultsOnly, Category = WeaponStat)
+		float AltEquipDuration;
+
+	/** Does this weapon use a sphere trace instead of a line trace?*/
+	UPROPERTY(EditDefaultsOnly, Category = WeaponStat)
+		bool bSphereTrace;
+
+	/** Radius of the sphere trace*/
+	UPROPERTY(EditDefaultsOnly, Category = WeaponStat)
+		float SphereTraceRadius;
+
+	/** The range at which the crosshair turns red*/
+	UPROPERTY(EditDefaultsOnly, Category = WeaponStat)
+		float ReticuleRange;
 
 	/*End John's code*/
 
@@ -76,6 +102,13 @@ struct FWeaponData
 		bBurstWeapon = false;
 		ShotsPerBurst = 1;
 		TimeBetweenBursts = 0.5f;
+		bExtraWeapon = false;
+		bEquippable = true;
+		bNeedsReload = true;
+		AltEquipDuration = 0.0f;
+		bSphereTrace = false;
+		SphereTraceRadius = 0.0f;
+		ReticuleRange = 10000.0f;
 	}
 };
 
@@ -162,6 +195,21 @@ class AShooterWeapon : public AActor
 	/** [local + server] stop weapon fire */
 	virtual void StopFire();
 
+	////John
+	///** Fire once without having to switch weapons (grenade throw) */
+	//void QuickFire();
+
+	//void StartQuickFire();
+
+	//void FinishQuickFire();
+
+	float GetTimeBetweenShots();
+
+	//FTimerHandle TimerHandle_FinishQuickFire;
+
+	//UFUNCTION(reliable, server, WithValidation)
+	//void ServerQuickFire();
+
 	/*John*/
 	/*StartFire function for burst weapon*/
 	void BurstWeapon_StartFire();
@@ -195,6 +243,8 @@ class AShooterWeapon : public AActor
 	/** check if weapon can be reloaded */
 	bool CanReload() const;
 
+	/** check if, the crosshair is overlapping a target*/
+	bool CanHit() const;
 
 	//////////////////////////////////////////////////////////////////////////
 	// Reading data
@@ -290,6 +340,7 @@ class AShooterWeapon : public AActor
 
 	/**	John:
 	*		The Weapon Pickup of this weapon
+			You should probably make this protected and make a function that returns it
 	*/
 
 	UPROPERTY(EditDefaultsOnly, Category = Pickup)
@@ -298,6 +349,12 @@ class AShooterWeapon : public AActor
 	/**	Given a shooter weapon pickup, set this weapon's properties to match the pickup*/
 	void SetWeaponProperties(AShooterWeaponPickup* WeaponPickup);
 
+	/** Is this weapon an extra weapon? Can it be picked up when your inventory is full?*/
+	bool IsExtraWeapon();
+
+
+	/** Is this weapon equippable? */
+	bool IsEquippable();
 
 protected:
 
@@ -308,6 +365,8 @@ protected:
 	/** weapon data */
 	UPROPERTY(EditDefaultsOnly, Category = Config)
 		FWeaponData WeaponConfig;
+
+	bool bQuickFiring;
 
 private:
 	/** weapon mesh: 1st person view */

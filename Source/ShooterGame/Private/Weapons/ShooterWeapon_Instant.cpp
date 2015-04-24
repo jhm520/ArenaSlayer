@@ -46,7 +46,9 @@ void AShooterWeapon_Instant::ServerNotifyHit_Implementation(const FHitResult Imp
 
 		// is the angle between the hit and the view within allowed limits (limit + weapon max angle)
 		const float ViewDotHitDir = FVector::DotProduct(Instigator->GetViewRotation().Vector(), ViewDir);
-		if (ViewDotHitDir > InstantConfig.AllowedViewDotHitDir - WeaponAngleDot)
+		//John
+		//Melee-shooting fix here
+		if ((ViewDotHitDir > InstantConfig.AllowedViewDotHitDir - WeaponAngleDot) || ((Instigator->GetActorLocation() - Impact.Location).Size() < 200.0f))
 		{
 			if (CurrentState != EWeaponState::Idle)
 			{
