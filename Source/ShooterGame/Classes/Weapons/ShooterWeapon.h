@@ -39,6 +39,10 @@ struct FWeaponData
 	UPROPERTY(EditDefaultsOnly, Category = Ammo)
 		int32 InitialClips;
 
+	/** Time delay before shot */
+	UPROPERTY(EditDefaultsOnly, Category = WeaponStat)
+		float TimeBeforeShot;
+
 	/** time between two consecutive shots */
 	UPROPERTY(EditDefaultsOnly, Category = WeaponStat)
 		float TimeBetweenShots;
@@ -68,6 +72,10 @@ struct FWeaponData
 	UPROPERTY(EditDefaultsOnly, Category = WeaponStat)
 		bool bEquippable;
 
+	/** if this weapon is always equipped (i.e. grenades/melee)*/
+	UPROPERTY(EditDefaultsOnly, Category = WeaponStat)
+		bool bAlwaysEquipped;
+
 	/** if this weapon needs to reload*/
 	UPROPERTY(EditDefaultsOnly, Category = WeaponStat)
 		bool bNeedsReload;
@@ -87,6 +95,28 @@ struct FWeaponData
 	UPROPERTY(EditDefaultsOnly, Category = WeaponStat)
 		float ReticuleRange;
 
+	/** if this weapon has a melee lunge */
+	UPROPERTY(EditDefaultsOnly, Category = WeaponStat)
+		bool bLunge;
+
+	/** range at which this weapon can lunge */
+	UPROPERTY(EditDefaultsOnly, Category=WeaponStat)
+		float LungeRange;
+
+	UPROPERTY(EditDefaultsOnly, Category = WeaponStat)
+		float LungeFinishRange;
+
+	/** Lunge impulse size */
+	UPROPERTY(EditDefaultsOnly, Category = WeaponStat)
+		float LungeVelocity;
+
+	/** Will this weapon kill instantly if it hits a player in the back?*/
+	UPROPERTY(EditDefaultsOnly, Category = WeaponStat)
+		bool bAssassinate;
+
+	UPROPERTY(EditDefaultsOnly, Category = WeaponStat)
+		bool bHeadshot;
+
 	/*End John's code*/
 
 	/** defaults */
@@ -97,6 +127,7 @@ struct FWeaponData
 		MaxAmmo = 100;
 		AmmoPerClip = 20;
 		InitialClips = 4;
+		TimeBeforeShot = 0.0f;
 		TimeBetweenShots = 0.2f;
 		NoAnimReloadDuration = 1.0f;
 		bBurstWeapon = false;
@@ -109,6 +140,14 @@ struct FWeaponData
 		bSphereTrace = false;
 		SphereTraceRadius = 0.0f;
 		ReticuleRange = 10000.0f;
+		bLunge = false;
+		LungeRange = 500.0f;
+		LungeFinishRange = 150;
+		LungeVelocity = 1000.0f;
+		bAssassinate = false;
+		bHeadshot = false;
+		bAlwaysEquipped = false;
+
 	}
 };
 
@@ -195,20 +234,12 @@ class AShooterWeapon : public AActor
 	/** [local + server] stop weapon fire */
 	virtual void StopFire();
 
-	////John
-	///** Fire once without having to switch weapons (grenade throw) */
-	//void QuickFire();
+	/** Equip this weapon without an animation */
+	void QuickEquip();
 
-	//void StartQuickFire();
-
-	//void FinishQuickFire();
+	void QuickUnEquip();
 
 	float GetTimeBetweenShots();
-
-	//FTimerHandle TimerHandle_FinishQuickFire;
-
-	//UFUNCTION(reliable, server, WithValidation)
-	//void ServerQuickFire();
 
 	/*John*/
 	/*StartFire function for burst weapon*/
@@ -237,6 +268,30 @@ class AShooterWeapon : public AActor
 	//////////////////////////////////////////////////////////////////////////
 	// Control
 
+	/** Set weapon equipped*/
+	void SetIsEquipped(bool bEquipped);
+
+	/** check if weapon is off cooldown and can fire*/
+	bool OffCooldown() const;
+
+	/** check if weapon can headshot*/
+	bool CanHeadshot();
+
+	/** check if weapon can assassinate*/
+	bool CanAssassinate();
+
+	/** check if weapon can lunge*/
+	bool CanLunge() const;
+	
+	/** Get this weapon's lunge impulse size */
+	float GetLungeVelocity();
+
+	/** Get this weapon's lunge range */
+	float GetLungeRange();
+
+	/** Get this weapon's lunge finish range*/
+	float GetLungeFinishRange();
+
 	/** check if weapon can fire */
 	bool CanFire() const;
 
@@ -245,6 +300,9 @@ class AShooterWeapon : public AActor
 
 	/** check if, the crosshair is overlapping a target*/
 	bool CanHit() const;
+
+	/** find lunge hit */
+	FHitResult LungeTrace() const;
 
 	//////////////////////////////////////////////////////////////////////////
 	// Reading data
@@ -467,6 +525,8 @@ protected:
 	UPROPERTY(Transient, ReplicatedUsing = OnRep_Reload)
 		uint32 bPendingReload : 1;
 
+	bool bPendingShot;
+
 	/** is equip animation playing? */
 	uint32 bPendingEquip : 1;
 
@@ -541,6 +601,9 @@ protected:
 	/*Stop fuckin firing Timer*/
 	FTimerHandle TimerHandle_StopFire;
 
+	/*Timer for delaying weapon firing*/
+	FTimerHandle TimerHandle_HandleShot;
+
 	//////////////////////////////////////////////////////////////////////////
 	// Input - server side
 
@@ -581,10 +644,17 @@ protected:
 
 	/** [local] weapon specific fire implementation */
 	virtual void FireWeapon() PURE_VIRTUAL(AShooterWeapon::FireWeapon, );
+	
+	/** Fire a single shot, called within handle firing*/
+	void HandleShot();
 
 	/** [server] fire & update ammo */
 	UFUNCTION(reliable, server, WithValidation)
 		void ServerHandleFiring();
+
+	/** [server] fire one shot & update ammo */
+	UFUNCTION(reliable, server, WithValidation)
+		void ServerHandleShot();
 
 	/** [local + server] handle weapon fire */
 	void HandleFiring();

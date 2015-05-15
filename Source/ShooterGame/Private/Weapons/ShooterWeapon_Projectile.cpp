@@ -11,9 +11,20 @@ AShooterWeapon_Projectile::AShooterWeapon_Projectile(const FObjectInitializer& O
 
 void AShooterWeapon_Projectile::FireWeapon()
 {
-
+	FVector Origin = FVector::ZeroVector;
 	FVector ShootDir = GetAdjustedAim();
-	FVector Origin = GetMuzzleLocation();
+	if (ProjectileConfig.bCameraIsOrigin)
+	{
+		
+		Origin = GetCameraDamageStartLocation(ShootDir) + ShootDir * 100;
+	}
+	else
+	{
+		Origin = GetMuzzleLocation();
+	}
+	//FVector Origin = GetMuzzleLocation();
+
+	
 
 	// trace from camera to check what's under crosshair
 	const float ProjectileAdjustRange = 10000.0f;

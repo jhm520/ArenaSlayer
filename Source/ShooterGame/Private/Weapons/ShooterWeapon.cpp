@@ -50,6 +50,8 @@ AShooterWeapon::AShooterWeapon(const FObjectInitializer& ObjectInitializer) : Su
 	BurstDuration = 0.0f;
 	bBurstPausing = false;
 
+	bPendingShot = false;
+
 	//bQuickFiring = false;
 
 	/*End John*/
@@ -91,6 +93,13 @@ void AShooterWeapon::PostInitializeComponents()
 	BurstDuration = WeaponConfig.TimeBetweenShots * WeaponConfig.ShotsPerBurst;
 
 	DetachMeshFromPawn();
+
+	//John
+	if (WeaponConfig.bAlwaysEquipped)
+	{
+		//AttachMeshToPawn();
+		bIsEquipped = true;
+	}
 }
 
 void AShooterWeapon::Destroyed()
@@ -102,6 +111,51 @@ void AShooterWeapon::Destroyed()
 
 //////////////////////////////////////////////////////////////////////////
 // Inventory
+
+//John
+/** Equip this weapon without an animation */
+void AShooterWeapon::QuickEquip()
+{
+	AttachMeshToPawn();
+	bPendingEquip = true;
+	DetermineWeaponState();
+	AttachMeshToPawn();
+	bIsEquipped = true;
+	bPendingEquip = false;
+	DetermineWeaponState();
+}
+
+//John
+void AShooterWeapon::QuickUnEquip()
+{
+	DetachMeshFromPawn();
+
+	if (!WeaponConfig.bAlwaysEquipped)
+	{
+		bIsEquipped = false;
+	}
+	
+	StopFire();
+
+	if (bPendingReload)
+	{
+		StopWeaponAnimation(ReloadAnim);
+		bPendingReload = false;
+
+		GetWorldTimerManager().ClearTimer(TimerHandle_StopReload);
+		GetWorldTimerManager().ClearTimer(TimerHandle_ReloadWeapon);
+	}
+
+	if (bPendingEquip)
+	{
+		StopWeaponAnimation(EquipAnim);
+		bPendingEquip = false;
+
+		GetWorldTimerManager().ClearTimer(TimerHandle_OnEquipFinished);
+	}
+
+	DetermineWeaponState();
+}
 
 void AShooterWeapon::OnEquip()
 {
@@ -313,64 +367,10 @@ void AShooterWeapon::StopFire()
 	}
 }
 
-////John
-//void AShooterWeapon::QuickFire()
-//{
-//	if (Role == ROLE_Authority)
-//	{
-//		bIsEquipped = true;
-//
-//		if (MyPawn && MyPawn->IsLocallyControlled())
-//		{
-//			MyPawn->bQuickFiring = true;
-//		}
-//		
-//		StartFire();
-//		StopFire();
-//		bIsEquipped = false;
-//	}
-//	else
-//	{
-//		ServerQuickFire();
-//	}
-//}
-
-//void AShooterWeapon::StartQuickFire()
-//{
-//	return;
-//}
-
 float AShooterWeapon::GetTimeBetweenShots()
 {
 	return WeaponConfig.TimeBetweenShots;
 }
-
-//void AShooterWeapon::FinishQuickFire()
-//{
-//	FString YourDebugMessage = FString(TEXT("Finished quick fire."));
-//
-//	if (GEngine)
-//	{
-//		GEngine->AddOnScreenDebugMessage(-1, 0.5f, FColor::Yellow, YourDebugMessage);
-//	}
-//
-//	if (MyPawn && MyPawn->IsLocallyControlled())
-//	{
-//		MyPawn->bQuickFiring = false;
-//	}
-//	GetWorldTimerManager().ClearTimer(TimerHandle_FinishQuickFire);
-//	return;
-//}
-
-//void AShooterWeapon::ServerQuickFire_Implementation()
-//{
-//	QuickFire();
-//}
-//
-//bool AShooterWeapon::ServerQuickFire_Validate()
-//{
-//	return true;
-//}
 
 //StartFire handler for Burst Weapons
 void AShooterWeapon::BurstWeapon_StartFire()
@@ -578,6 +578,116 @@ void AShooterWeapon::ClientStartReload_Implementation()
 //////////////////////////////////////////////////////////////////////////
 // Control
 
+void AShooterWeapon::SetIsEquipped(bool bEquipped)
+{
+	bIsEquipped = bEquipped;
+}
+
+float AShooterWeapon::GetLungeVelocity()
+{
+	return WeaponConfig.LungeVelocity;
+}
+
+float AShooterWeapon::GetLungeRange()
+{
+	return WeaponConfig.LungeRange;
+}
+
+float AShooterWeapon::GetLungeFinishRange()
+{
+	return WeaponConfig.LungeFinishRange;
+}
+
+FHitResult AShooterWeapon::LungeTrace() const
+{
+
+	const FVector AimDir = GetAdjustedAim();
+	const FVector StartTrace = GetCameraDamageStartLocation(AimDir);
+	const FVector EndTrace = StartTrace + AimDir * WeaponConfig.LungeRange;
+
+	FHitResult Hit = WeaponTrace(StartTrace, EndTrace);
+
+	return Hit;
+
+	/*if (Hit.GetActor() != NULL && Hit.GetActor()->ActorHasTag(FName(TEXT("Damageable"))) && !(Hit.GetActor()->IsRootComponentStatic() || Hit.GetActor()->IsRootComponentStationary()))
+	{
+		AShooterCharacter* HitChar = Cast<AShooterCharacter>(Hit.GetActor());
+
+		if (HitChar->Health > 0)
+		{
+			return Hit;
+		}
+		else
+		{
+			return Hit;
+		}
+		
+	else
+	{
+		return Hit;
+	}*/
+}
+
+bool AShooterWeapon::CanLunge() const
+{
+	////If this weapon cannot lunge
+	//if (!WeaponConfig.bLunge)
+	//{
+	//	return false;
+	//}
+
+	//const FVector AimDir = GetAdjustedAim();
+	//const FVector StartTrace = GetCameraDamageStartLocation(AimDir);
+	//const FVector EndTrace = StartTrace + AimDir * WeaponConfig.LungeRange;
+
+	//FHitResult Hit = WeaponTrace(StartTrace, EndTrace);
+
+	//if (Hit.GetActor() != NULL && Hit.GetActor()->ActorHasTag(FName(TEXT("Damageable"))) && !(Hit.GetActor()->IsRootComponentStatic() || Hit.GetActor()->IsRootComponentStationary()))
+	//{
+	//	AShooterCharacter* HitChar = Cast<AShooterCharacter>(Hit.GetActor()); 
+
+	//	*LungeActor = Hit.GetActor();
+
+	//	return HitChar->Health > 0;
+	//}
+	//else
+	//{
+	//	return false;
+	//}
+	return WeaponConfig.bLunge;
+}
+
+bool AShooterWeapon::CanHeadshot()
+{
+	return WeaponConfig.bHeadshot;
+}
+
+bool AShooterWeapon::CanAssassinate()
+{
+	return WeaponConfig.bAssassinate;
+}
+
+bool AShooterWeapon::OffCooldown() const
+{
+	const float GameTime = GetWorld()->GetTimeSeconds();
+	bool bShotOffCooldown = /*LastFireTime > 0.0f && WeaponConfig.TimeBetweenShots > 0.0f && */LastFireTime + WeaponConfig.TimeBetweenShots <= GameTime;
+	/*if (GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(-1, 0.5f, FColor::Yellow, FString::SanitizeFloat(TraceShape.GetSphereRadius()));
+	}*/
+	
+	if (WeaponConfig.bBurstWeapon)
+	{
+		bool bBurstOffCooldown = (!bPendingBurst && (BurstStartTime + BurstDuration + WeaponConfig.TimeBetweenBursts) <= GameTime);
+		return bShotOffCooldown && bBurstOffCooldown && !bPendingReload;
+	}
+	else
+	{
+		return bShotOffCooldown && !bPendingReload;
+	}
+	
+}
+
 bool AShooterWeapon::CanFire() const
 {
 	bool bCanFire = MyPawn && MyPawn->CanFire();
@@ -669,6 +779,36 @@ void AShooterWeapon::UseAmmo()
 	}
 }
 
+void AShooterWeapon::HandleShot()
+{
+
+	if (Role == ROLE_Authority)
+	{
+		if (GEngine)
+		{
+			GEngine->AddOnScreenDebugMessage(-1, 0.5f, FColor::Yellow, FString(TEXT("Server.")));
+		}
+		FireWeapon();
+
+		UseAmmo();
+
+		// update firing FX on remote clients if function was called on server
+		BurstCounter++;
+
+		GetWorldTimerManager().ClearTimer(TimerHandle_HandleShot);
+	}
+	else
+	{
+		if (GEngine)
+		{
+			GEngine->AddOnScreenDebugMessage(-1, 0.5f, FColor::Yellow, FString(TEXT("Client.")));
+		}
+		ServerHandleShot();
+	}
+
+	
+}
+
 void AShooterWeapon::HandleFiring()
 {
 	if ((CurrentAmmoInClip > 0 || HasInfiniteClip() || HasInfiniteAmmo()) && CanFire())
@@ -680,13 +820,40 @@ void AShooterWeapon::HandleFiring()
 
 		if (MyPawn && MyPawn->IsLocallyControlled())
 		{
-			FireWeapon();
+			if (WeaponConfig.TimeBeforeShot > 0.0f)
+			{
+				if (Role == ROLE_Authority)
+				{
+					if (GEngine)
+					{
+						GEngine->AddOnScreenDebugMessage(-1, 0.5f, FColor::Yellow, FString(TEXT("Server set timer.")));
+					}
+				}
+				else
+				{
+					if (GEngine)
+					{
+						GEngine->AddOnScreenDebugMessage(-1, 0.5f, FColor::Yellow, FString(TEXT("Client set timer.")));
+					}
+				}
+				GetWorldTimerManager().SetTimer(TimerHandle_HandleShot, this, &AShooterWeapon::HandleShot, WeaponConfig.TimeBeforeShot, false);
+			}
+			else
+			{
+				//HandleShot();
+				FireWeapon();
 
-			UseAmmo();
+				UseAmmo();
 
-			// update firing FX on remote clients if function was called on server
-			BurstCounter++;
+				// update firing FX on remote clients if function was called on server
+				BurstCounter++;
+			}
+			
 		}
+		/*else if (MyPawn && !MyPawn->IsLocallyControlled() && WeaponConfig.TimeBeforeShot > 0.0f)
+		{
+			GetWorldTimerManager().SetTimer(TimerHandle_HandleShot, this, &AShooterWeapon::HandleShot, WeaponConfig.TimeBeforeShot, false);
+		}*/
 	}
 	else if (CanReload())
 	{
@@ -756,6 +923,16 @@ void AShooterWeapon::ServerHandleFiring_Implementation()
 		// update firing FX on remote clients
 		BurstCounter++;
 	}
+}
+
+bool AShooterWeapon::ServerHandleShot_Validate()
+{
+	return true;
+}
+
+void AShooterWeapon::ServerHandleShot_Implementation()
+{
+	HandleShot();
 }
 
 void AShooterWeapon::ReloadWeapon()
@@ -997,10 +1174,10 @@ FHitResult AShooterWeapon::WeaponTrace(const FVector& StartTrace, const FVector&
 		FCollisionShape TraceShape;
 		TraceShape.SetSphere(WeaponConfig.SphereTraceRadius);
 		//TraceShape.MakeSphere(WeaponConfig.SphereTraceRadius);
-		if (GEngine)
+		/*if (GEngine)
 		{
 			GEngine->AddOnScreenDebugMessage(-1, 0.5f, FColor::Yellow, FString::SanitizeFloat(TraceShape.GetSphereRadius()));
-		}
+		}*/
 		GetWorld()->SweepSingle(Hit, StartTrace, EndTrace, TraceRotator, COLLISION_WEAPON, TraceShape, TraceParams);
 	}
 	else

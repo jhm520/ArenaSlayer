@@ -25,6 +25,9 @@ struct FProjectileWeaponData
 	UPROPERTY(EditDefaultsOnly, Category = Projectile)
 	float ExplodeTimeAfterBounce;
 
+	UPROPERTY(EditDefaultsOnly, Category = Projectile)
+	bool SetTimerOnFloorBounce;
+
 	/** Will this grenade explode when it's velocity is zero? */
 	UPROPERTY(EditDefaultsOnly, Category = Projectile)
 	bool ExplodeOnStop;
@@ -51,6 +54,10 @@ struct FProjectileWeaponData
 	UPROPERTY(EditDefaultsOnly, Category=WeaponStat)
 	TSubclassOf<UDamageType> DamageType;
 
+	/** Projectile origin is camera*/
+	UPROPERTY(EditDefaultsOnly, Category = WeaponStat)
+		bool bCameraIsOrigin;
+
 
 	/** defaults */
 	FProjectileWeaponData()
@@ -59,12 +66,14 @@ struct FProjectileWeaponData
 		ProjectileLife = 10.0f;
 		ExplodeTime = 0.0;
 		ExplodeTimeAfterBounce = 0.0f;
+		SetTimerOnFloorBounce = false;
 		ExplosionDamage = 100;
 		ExplosionRadius = 300.0f;
 		ExplodeOnStop = true;
 		bSticky = false;
 		DamageType = UDamageType::StaticClass();
 		StuckDamage = 100;
+		bCameraIsOrigin = false;
 	}
 };
 

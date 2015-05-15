@@ -93,8 +93,15 @@ void AShooterProjectile::OnBounce(const FHitResult& ImpactResult, const FVector&
 	{
 		if (!bBounced)
 		{
-			bBounced = true;
-			BounceTime = GetWorld()->GetTimeSeconds();
+			if (WeaponConfig.SetTimerOnFloorBounce)
+			{
+
+			}
+			else
+			{
+				bBounced = true;
+				BounceTime = GetWorld()->GetTimeSeconds();
+			}
 		}
 	}                                  
 }
@@ -119,6 +126,25 @@ void AShooterProjectile::Stick(UPrimitiveComponent * MyComp, UPrimitiveComponent
 void AShooterProjectile::ReceiveHit(UPrimitiveComponent * MyComp, AActor * Other, UPrimitiveComponent * OtherComp,
 	bool bSelfMoved, FVector HitLocation, FVector HitNormal, FVector NormalImpulse, const FHitResult & Hit)
 {
+	if (WeaponConfig.ExplodeTimeAfterBounce > 0.0f)
+	{
+		if (!bBounced)
+		{
+			if (WeaponConfig.SetTimerOnFloorBounce)
+			{
+				if (HitNormal.Z > 0.0f)
+				{
+					/*if (GEngine)
+					{
+						GEngine->AddOnScreenDebugMessage(-1, 1.0f, FColor::Yellow, FString(TEXT("Bounced off floor.")));
+					}*/
+					bBounced = true;
+					BounceTime = GetWorld()->GetTimeSeconds();
+				}
+			}
+		}
+	}
+
 	if (WeaponConfig.bSticky && !bStuck && OtherComp->ComponentHasTag("Sticky"))
 	{
 		Stick(MyComp, OtherComp, bSelfMoved, Hit);

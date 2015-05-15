@@ -101,22 +101,22 @@ class AShooterCharacter : public ACharacter
 	void Interact();
 
 	//John
-	void StartQuickFire(AShooterWeapon* QuickFireWeapon);
+	/*void StartQuickFire(AShooterWeapon* QuickFireWeapon);
+*/
+	void FireExtraWeapon(AShooterWeapon* ExtraWeapon);
 
-	void QuickFire();
-
-	void FinishQuickFire();
+	//void FinishQuickFire();
 
 	//temp storage for QuickFire weapon
-	AShooterWeapon* QuickFiringWeapon;
+	/*AShooterWeapon* QuickFiringWeapon;
 
 	FTimerHandle  TimerHandle_QuickFire;
 
-	FTimerHandle TimerHandle_FinishQuickFire;
+	FTimerHandle TimerHandle_FinishQuickFire;*/
 
-	AShooterWeapon* PrevWeapon;
+	//AShooterWeapon* PrevWeapon;
 
-	bool IsQuickFiring();
+	//bool IsQuickFiring();
 
 	//////////////////////////////////////////////////////////////////////////
 	// Weapon usage
@@ -132,6 +132,9 @@ class AShooterCharacter : public ACharacter
 
 	/** check if pawn can reload weapon */
 	bool CanReload() const;
+
+	/** check if all inventory is off cooldown */
+	bool InventoryOffCooldown(bool bExceptCurrent = false) const;
 
 	/** [server + local] change targeting state */
 	void SetTargeting(bool bNewTargeting);
@@ -337,15 +340,22 @@ private:
 	/** pawn mesh: 1st person view */
 	UPROPERTY(VisibleDefaultsOnly, Category=Mesh)
 	USkeletalMeshComponent* Mesh1P;
+
 protected:
 
 	//John
 	/** trigger start weapon fire from server */
 	UFUNCTION(reliable, client)
-	void ClientStartWeaponFire();
+	void ClientFireExtraWeapon(AShooterWeapon* ExtraWeapon);
+
+	UFUNCTION(reliable, server, WithValidation)
+		void ServerFireExtraWeapon(AShooterWeapon* ExtraWeapon);
 
 	UFUNCTION(reliable, client)
-		void ClientStopWeaponFire();
+		void ClientFireWeapon();
+
+	//UFUNCTION(reliable, client)
+	//	void ClientStopWeaponFire();
 
 	/**The object the player is currently pointing at*/
 	AActor* PointingAtObject;
@@ -524,6 +534,43 @@ protected:
 
 public:
 
+	//John
+
+	virtual void ReceiveHit
+		(
+		UPrimitiveComponent * MyComp,
+		AActor * Other,
+		UPrimitiveComponent * OtherComp,
+		bool bSelfMoved,
+		FVector HitLocation,
+		FVector HitNormal,
+		FVector NormalImpulse,
+		const FHitResult & Hit
+		) override;
+
+	/** Start lunging*/
+	void StartLunge(AShooterWeapon* LungingWeapon);
+
+	UFUNCTION(Server, Reliable, WithValidation)
+		void ServerStartLunge(AShooterWeapon* LungingWeapon);
+
+	/** Lunge in a direction*/
+	void Lunge();
+
+	/** Finish Lunge*/
+	void FinishLunge();
+
+	UFUNCTION(Server, Reliable, WithValidation)
+		void ServerFinishLunge();
+
+	void CheckLungeFinished();
+
+	UFUNCTION(Server, Reliable, WithValidation)
+		void ServerCheckLungeFinished();
+
+	/** Is the pawn lunging?*/
+	bool IsLunging();
+
 	/** Identifies if pawn is in its dying state */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category=Health)
 	uint32 bIsDying:1;
@@ -540,7 +587,14 @@ public:
 	virtual bool CanHeadshot(class AActor* DamageCauser);
 
 	/** Check whether or not the character should die to a headshot.*/
-	virtual bool ShieldsDown();
+	UFUNCTION(BluePrintCallable, Category=Pawn)
+		bool ShieldsDown();
+
+	/** Set shields up*/
+	void SetShields(bool bShieldsUp);
+
+	/*UFUNCTION(Client, Reliable)
+		void ClientSetShields(bool bShieldsUp);*/
 
 	/** Pawn suicide */
 	virtual void Suicide();
@@ -594,7 +648,43 @@ public:
 	/*Timerhandle for Regenerate function*/
 	FTimerHandle TimerHandle_Regenerate;
 
+	private:
+
+		UStaticMeshComponent* Shields;
+
 protected:
+
+	//John
+
+	FTimerHandle TimerHandle_Lunge;
+
+	//Temp Storage for movement component variables
+	float PrevWalkDecel;
+
+	float PrevGroundFriction;
+
+	float PrevGravScale;
+
+	float PrevMaxWalkSpeed;
+
+	bool LungeFinished;
+
+	FHitResult LungeHit;
+	
+	bool bQuickFireLunge;
+
+	AShooterWeapon* LungeWeapon;
+
+	UPROPERTY(Replicated)
+		bool bLunging;
+
+	UPROPERTY(Replicated)
+		AActor* LungeActor;
+	
+	FVector LungeStartLocation;
+	FVector LungeFinishLocation;
+
+
 	/** notification when killed, for both the server and client. */
 	virtual void OnDeath(float KillingDamage, struct FDamageEvent const& DamageEvent, class APawn* InstigatingPawn, class AActor* DamageCauser);
 
