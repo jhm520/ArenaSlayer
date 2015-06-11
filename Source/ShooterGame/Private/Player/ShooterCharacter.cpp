@@ -158,6 +158,15 @@ FRotator AShooterCharacter::GetAimOffsets() const
 	return AimRotLS;
 }
 
+float AShooterCharacter::GetFOV()
+{
+	if (bIsTargeting)
+	{
+
+	}
+	return DefaultFOV;
+}
+
 //John
 /**Get camera aim*/
 FVector AShooterCharacter::GetCameraAim() const
@@ -203,13 +212,16 @@ void AShooterCharacter::StartLunge(AShooterWeapon* LungingWeapon)
 		{
 			AShooterCharacter* HitChar = Cast<AShooterCharacter>(LungeHit.GetActor());
 
-			//*LungeActor = LungeHit.GetActor();
+			LungeActor = LungeHit.GetActor();
 
 			if (HitChar->Health > 0)
 			{
 				Lunge();
 				return;
 			}
+
+			LungeActor = NULL;
+			LungeHit = FHitResult();
 		}
 		/*else
 		{
@@ -217,6 +229,10 @@ void AShooterCharacter::StartLunge(AShooterWeapon* LungingWeapon)
 		}
 		
 		Lunge();*/
+		/*if (GEngine)
+		{
+			GEngine->AddOnScreenDebugMessage(-1, 0.5f, FColor::Yellow, FString(TEXT("Fire Weapon")));
+		}
 		if (LungeWeapon == CurrentWeapon)
 		{
 			ClientFireWeapon();
@@ -224,7 +240,7 @@ void AShooterCharacter::StartLunge(AShooterWeapon* LungingWeapon)
 		else
 		{
 			ClientFireExtraWeapon(LungeWeapon);
-		}
+		}*/
 	}
 	else
 	{
@@ -250,7 +266,7 @@ void AShooterCharacter::Lunge()
 	LungeStartLocation = GetActorLocation();
 	if (LungeActor)
 	{
-		LungeFinishLocation = LungeActor->GetActorLocation();
+		LungeFinishLocation = LungeHit.Location;
 	}
 
 	bLunging = true;
@@ -297,7 +313,12 @@ void AShooterCharacter::FinishLunge()
 
 		GetWorldTimerManager().ClearTimer(TimerHandle_Lunge);
 		LungeWeapon = NULL;
+		LungeActor = NULL;
+		LungeHit = FHitResult();
+
 		bLunging = false;
+
+		LungeFinished = false;
 	}
 	else
 	{
@@ -490,8 +511,10 @@ void AShooterCharacter::OnCameraUpdate(const FVector& CameraLocation, const FRot
 	const FMatrix PitchedCameraLS = FRotationMatrix(RotCameraPitch) * LeveledCameraLS;
 	const FMatrix MeshRelativeToCamera = DefMeshLS * LeveledCameraLS.Inverse();
 	const FMatrix PitchedMesh = MeshRelativeToCamera * PitchedCameraLS;
-
-	Mesh1P->SetRelativeLocationAndRotation(PitchedMesh.GetOrigin(), PitchedMesh.Rotator());
+	
+	//John
+	//Disabled this for now to accomodate for new First person mesh
+	//Mesh1P->SetRelativeLocationAndRotation(PitchedMesh.GetOrigin(), PitchedMesh.Rotator());
 }
 
 
@@ -605,13 +628,15 @@ float AShooterCharacter::TakeDamage(float Damage, struct FDamageEvent const& Dam
 
 		AShooterWeapon* DamageCauserWeapon = Cast<AShooterWeapon>(DamageCauser);
 
+		
+
 		if (DamageCauserWeapon)
 		{
 			//Check for headshot
 			if (ShieldsDown() && DamageCauserWeapon->CanHeadshot())//CanHeadshot(DamageCauser))
 			{
 				//If the pawn was hit in the head
-				if (ThisHit.BoneName.ToString() == "b_head")
+				if (ThisHit.BoneName.ToString() == "head" || ThisHit.BoneName.ToString() == "neck_01")
 				{
 					//Dead
 					Health = 0;
@@ -756,6 +781,11 @@ bool AShooterCharacter::Die(float KillingDamage, FDamageEvent const& DamageEvent
 
 	Health = FMath::Min(0.0f, Health);
 
+	/*if (bIsTargeting)
+	{
+		OnStopTargeting();
+	}*/
+
 	// if this is an environmental death then refer to the previous killer so that they receive credit (knocked into lava pits, etc)
 	UDamageType const* const DamageType = DamageEvent.DamageTypeClass ? DamageEvent.DamageTypeClass->GetDefaultObject<UDamageType>() : GetDefault<UDamageType>();
 	Killer = GetDamageInstigator(Killer, *DamageType);
@@ -765,6 +795,13 @@ bool AShooterCharacter::Die(float KillingDamage, FDamageEvent const& DamageEvent
 
 	NetUpdateFrequency = GetDefault<AShooterCharacter>()->NetUpdateFrequency;
 	GetCharacterMovement()->ForceReplicationUpdate();
+
+	////John
+	////Drop Currently held weapon
+	if (CurrentWeapon->IsDroppable())
+	{
+		DropWeapon();
+	}
 
 	OnDeath(KillingDamage, DamageEvent, Killer ? Killer->GetPawn() : NULL, DamageCauser);
 	return true;
@@ -803,6 +840,7 @@ void AShooterCharacter::OnDeath(float KillingDamage, struct FDamageEvent const& 
 	{
 		UGameplayStatics::PlaySoundAtLocation(this, DeathSound, GetActorLocation());
 	}
+	
 
 	// remove all weapons
 	DestroyInventory();
@@ -837,12 +875,25 @@ void AShooterCharacter::OnDeath(float KillingDamage, struct FDamageEvent const& 
 	// Death anim
 	float DeathAnimDuration = PlayAnimMontage(DeathAnim);
 
+	float Offset = 0.5f;
+
+	DeathAnimDuration -= Offset;
+
 	// Ragdoll
 	if (DeathAnimDuration > 0.f)
 	{
+		if (GEngine)
+		{
+			GEngine->AddOnScreenDebugMessage(-1, 1, FColor::Yellow, FString(TEXT("Death anim")));
+		}
+
+		if (GEngine)
+		{
+			GEngine->AddOnScreenDebugMessage(-1, 1, FColor::Yellow, FString::SanitizeFloat(DeathAnimDuration));
+		}
 		// Use a local timer handle as we don't need to store it for later but we don't need to look for something to clear
 		FTimerHandle TimerHandle;
-		GetWorldTimerManager().SetTimer(TimerHandle, this, &AShooterCharacter::SetRagdollPhysics, FMath::Min(0.1f, DeathAnimDuration), false);
+		GetWorldTimerManager().SetTimer(TimerHandle, this, &AShooterCharacter::SetRagdollPhysics, FMath::Max(0.1f, DeathAnimDuration), false);
 	}
 	else
 	{
@@ -919,15 +970,28 @@ void AShooterCharacter::SetRagdollPhysics()
 	GetCharacterMovement()->DisableMovement();
 	GetCharacterMovement()->SetComponentTickEnabled(false);
 
+	//John
+	bInRagdoll = false;
+
 	if (!bInRagdoll)
 	{
+		if (GEngine)
+		{
+			GEngine->AddOnScreenDebugMessage(-1, 0.5f, FColor::Yellow, FString(TEXT("Not in ragdoll")));
+		}
+		Mesh->bPauseAnims = true;
+		Mesh1P->bPauseAnims = true;
 		// hide and set short lifespan
 		TurnOff();
-		SetActorHiddenInGame(true);
-		SetLifeSpan( 1.0f );
+		//SetActorHiddenInGame(true);
+		SetLifeSpan( 5.0f );
 	}
 	else
 	{
+		if (GEngine)
+		{
+			GEngine->AddOnScreenDebugMessage(-1, 0.5f, FColor::Yellow, FString(TEXT("In ragdoll")));
+		}
 		SetLifeSpan( 10.0f );
 	}
 }
@@ -993,7 +1057,8 @@ void AShooterCharacter::DropWeapon()
 		if (CurrentWeapon)
 		{
 			AShooterWeapon* RemovedWeapon = CurrentWeapon;
-			OnNextWeapon();
+			//OnNextWeapon();
+			
 			//This works at removing the weapon
 
 			if (Inventory.Num() > 1)
@@ -1019,6 +1084,7 @@ void AShooterCharacter::DropWeapon()
 
 				RemoveWeapon(RemovedWeapon);
 			}
+			OnSwitchWeapon();
 		}
 	}
 	else
@@ -1188,8 +1254,10 @@ bool AShooterCharacter::ServerFireExtraWeapon_Validate(AShooterWeapon* ExtraWeap
 
 void AShooterCharacter::ClientFireWeapon_Implementation()
 {
-	StartWeaponFire();
-	StopWeaponFire();
+	/*StartWeaponFire();
+	StopWeaponFire();*/
+	CurrentWeapon->StartFire();
+	CurrentWeapon->StopFire();
 }
 
 int32 AShooterCharacter::GetMaxInventory()
@@ -1212,6 +1280,36 @@ bool AShooterCharacter::InventoryFull()
 
 	return NumWeapons >= GetMaxInventory();
 }
+
+bool AShooterCharacter::InventoryEmpty()
+{
+	int32 NumWeapons = 0;
+
+	for (int32 i = 0; i < Inventory.Num(); i++)
+	{
+		if (!Inventory[i]->IsExtraWeapon())
+		{
+			return false;
+		}
+	}
+
+	return true;
+}
+
+int AShooterCharacter::NumPrimaryWeapons()
+{
+	int32 NumWeapons = 0;
+	for (int32 i = 0; i < Inventory.Num(); i++)
+	{
+		if (!Inventory[i]->IsExtraWeapon())
+		{
+			NumWeapons++;
+		}
+	}
+
+	return NumWeapons++;
+}
+
 
 void AShooterCharacter::SpawnDefaultInventory()
 {
@@ -1306,6 +1404,10 @@ void AShooterCharacter::EquipWeapon(AShooterWeapon* Weapon)
 {
 	if (Weapon)
 	{
+		if (bIsTargeting)
+		{
+			OnStopTargeting();
+		}
 		if (Role == ROLE_Authority)
 		{
 			SetCurrentWeapon(Weapon);
@@ -1317,6 +1419,8 @@ void AShooterCharacter::EquipWeapon(AShooterWeapon* Weapon)
 	}
 }
 
+
+
 bool AShooterCharacter::ServerEquipWeapon_Validate(AShooterWeapon* Weapon)
 {
 	return true;
@@ -1326,6 +1430,44 @@ void AShooterCharacter::ServerEquipWeapon_Implementation(AShooterWeapon* Weapon)
 {
 	EquipWeapon(Weapon);
 }
+
+void AShooterCharacter::HolsterWeapon(AShooterWeapon* Weapon)
+{
+	
+
+	
+	if (Role == ROLE_Authority)
+	{
+		//SetCurrentWeapon(Weapon);
+		if (GEngine)
+		{
+			GEngine->AddOnScreenDebugMessage(-1, 0.5f, FColor::Yellow, FString(TEXT("Holstered.")));
+		}
+		Weapon->HolsterWeapon();
+	}
+	else
+	{
+		
+		ServerHolsterWeapon(Weapon);
+	}
+}
+
+bool AShooterCharacter::ServerHolsterWeapon_Validate(AShooterWeapon* Weapon)
+{
+	return true;
+}
+
+void AShooterCharacter::ServerHolsterWeapon_Implementation(AShooterWeapon* Weapon)
+{
+	HolsterWeapon(Weapon);
+}
+
+void AShooterCharacter::ClientHolsterWeapon_Implementation(AShooterWeapon* Weapon)
+{
+	HolsterWeapon(Weapon);
+}
+
+
 
 //John
 /** Drop weapon server methods
@@ -1396,20 +1538,39 @@ void AShooterCharacter::StartWeaponFire()
 	if (!bWantsToFire)
 	{
 		bWantsToFire = true;
-		if (CurrentWeapon)
+		if (CurrentWeapon && !bLunging)
 		{
 			//if (GEngine)
 			//{
 			//	GEngine->AddOnScreenDebugMessage(-1, 0.5f, FColor::Yellow, CurrentWeapon->Tags[0].ToString());
 			//}
-			if (CurrentWeapon->CanLunge() && InventoryOffCooldown(false) && !bLunging)
+			if (InventoryOffCooldown(true))
+			{
+				if (CurrentWeapon->CanLunge() && InventoryOffCooldown() && !bLunging)
+				{
+					FHitResult TempLungeHit = CurrentWeapon->LungeTrace();
+					if (TempLungeHit.GetActor() != NULL && TempLungeHit.GetActor()->ActorHasTag(FName(TEXT("Damageable"))) && !(TempLungeHit.GetActor()->IsRootComponentStatic() || TempLungeHit.GetActor()->IsRootComponentStationary()))
+					{
+						StartLunge(CurrentWeapon);
+					}
+					else
+					{
+						CurrentWeapon->StartFire();
+					}
+				}
+				else if (!CurrentWeapon->CanLunge())
+				{
+					CurrentWeapon->StartFire();
+				}
+			}
+			/*if (CurrentWeapon->CanLunge() && InventoryOffCooldown(false) && !bLunging)
 			{
 				StartLunge(CurrentWeapon);
 			}
 			else if (InventoryOffCooldown(true))
 			{
 				CurrentWeapon->StartFire();
-			}
+			}*/
 		}
 	}
 }
@@ -1465,6 +1626,23 @@ void AShooterCharacter::SetTargeting(bool bNewTargeting)
 	if (TargetingSound)
 	{
 		UGameplayStatics::PlaySoundAttached(TargetingSound, GetRootComponent());
+	}
+	
+	if (bIsTargeting)
+	{
+		Mesh1P->SetVisibility(false);
+		if (IsFirstPerson())
+		{
+			CurrentWeapon->GetWeaponMesh()->SetVisibility(false);
+		}
+	}
+	else
+	{
+		Mesh1P->SetVisibility(true);
+		if (IsFirstPerson())
+		{
+			CurrentWeapon->GetWeaponMesh()->SetVisibility(true);
+		}
 	}
 
 	if (Role < ROLE_Authority)
@@ -1547,13 +1725,20 @@ void AShooterCharacter::UpdateRunSounds(bool bNewRunning)
 
 float AShooterCharacter::PlayAnimMontage(class UAnimMontage* AnimMontage, float InPlayRate, FName StartSectionName) 
 {
+	float Duration = 0.0f;
 	USkeletalMeshComponent* UseMesh = GetPawnMesh();
 	if (AnimMontage && UseMesh && UseMesh->AnimScriptInstance)
 	{
-		return UseMesh->AnimScriptInstance->Montage_Play(AnimMontage, InPlayRate);
+
+		Duration = UseMesh->AnimScriptInstance->Montage_Play(AnimMontage, InPlayRate);
+		/*if (GEngine)
+		{
+			GEngine->AddOnScreenDebugMessage(-1, 0.5f, FColor::Yellow, FString::SanitizeFloat(Duration));
+		}*/
+		return Duration;
 	}
 
-	return 0.0f;
+	return Duration;
 }
 
 void AShooterCharacter::StopAnimMontage(class UAnimMontage* AnimMontage)
@@ -1593,8 +1778,10 @@ void AShooterCharacter::SetupPlayerInputComponent(class UInputComponent* InputCo
 	InputComponent->BindAction("Fire", IE_Pressed, this, &AShooterCharacter::OnStartFire);
 	InputComponent->BindAction("Fire", IE_Released, this, &AShooterCharacter::OnStopFire);
 
-	InputComponent->BindAction("Targeting", IE_Pressed, this, &AShooterCharacter::OnStartTargeting);
-	InputComponent->BindAction("Targeting", IE_Released, this, &AShooterCharacter::OnStopTargeting);
+	//InputComponent->BindAction("Targeting", IE_Pressed, this, &AShooterCharacter::OnStartTargeting);
+	//InputComponent->BindAction("Targeting", IE_Released, this, &AShooterCharacter::OnStopTargeting);
+	InputComponent->BindAction("Targeting", IE_Pressed, this, &AShooterCharacter::OnToggleTargeting);
+
 
 	InputComponent->BindAction("NextWeapon", IE_Pressed, this, &AShooterCharacter::OnSwitchWeapon);
 	InputComponent->BindAction("PrevWeapon", IE_Pressed, this, &AShooterCharacter::OnSwitchWeapon);
@@ -1713,6 +1900,24 @@ void AShooterCharacter::OnStopTargeting()
 	SetTargeting(false);
 }
 
+void AShooterCharacter::OnToggleTargeting()
+{
+	AShooterPlayerController* MyPC = Cast<AShooterPlayerController>(Controller);
+	if (MyPC && MyPC->IsGameInputAllowed())
+	{
+
+		if (!bIsTargeting)
+		{
+			OnStartTargeting();
+		}
+		else
+		{
+			OnStopTargeting();
+		}
+	}
+}
+
+
 void AShooterCharacter::OnNextWeapon()
 {
 	AShooterPlayerController* MyPC = Cast<AShooterPlayerController>(Controller);
@@ -1765,14 +1970,54 @@ void AShooterCharacter::OnSwitchWeapon()
 		if (Inventory.Num() >= 2)// && (CurrentWeapon == NULL || CurrentWeapon->GetCurrentState() != EWeaponState::Equipping))
 		{
 			int32 CurrentWeaponIdx = Inventory.IndexOfByKey(CurrentWeapon);
-			AShooterWeapon* NextWeapon = Inventory[(CurrentWeaponIdx = CurrentWeaponIdx + 1) % Inventory.Num()];
+			//AShooterWeapon* NextWeapon = Inventory[(CurrentWeaponIdx = CurrentWeaponIdx + 1) % Inventory.Num()];
 
-			while (!NextWeapon->IsEquippable())
+			AShooterWeapon* NextWeapon = NULL;
+
+			for (int i = 0; i < Inventory.Num(); i++)
 			{
-				NextWeapon = Inventory[(CurrentWeaponIdx = CurrentWeaponIdx + 1) % Inventory.Num()];
+				if (!Inventory[i]->IsExtraWeapon() && Inventory[i] != CurrentWeapon)
+				{
+					NextWeapon = Inventory[i];
+					break;
+				}
+				
+				if (Inventory[i] == CurrentWeapon && NumPrimaryWeapons() == 1)
+				{
+					NextWeapon = Inventory[i];
+					break;
+				}
 			}
 
-			EquipWeapon(NextWeapon);
+
+			if (NextWeapon == CurrentWeapon)
+			{
+				return;
+			}
+			else if (NextWeapon)
+			{
+				/*if (GEngine)
+				{
+					GEngine->AddOnScreenDebugMessage(-1, 0.5f, FColor::Yellow, FString(TEXT("FUck")));
+				}
+				HolsterWeapon(Inventory[1]); */
+				EquipWeapon(NextWeapon);
+			}
+			else
+			{
+				EquipWeapon(FindWeapon(Melee));
+			}
+
+			//while (!NextWeapon->IsEquippable())
+			//{
+			//	//John
+			//	NextWeapon = Inventory[(CurrentWeaponIdx = CurrentWeaponIdx + 1) % Inventory.Num()];
+			//	if (CurrentWeaponIdx == Inventory.IndexOfByKey(NextWeapon))
+			//	{
+			//		EquipWeapon(FindWeapon(Melee));
+			//		return;
+			//	}
+			//}
 		}
 	}
 }
@@ -1783,7 +2028,7 @@ void AShooterCharacter::OnDropWeapon()
 	AShooterPlayerController* MyPC = Cast<AShooterPlayerController>(Controller);
 	if (MyPC && MyPC->IsGameInputAllowed())
 	{
-		if (CurrentWeapon && CurrentWeapon->WeaponPickup)//&& CurrentWeapon->GetCurrentState() != EWeaponState::Equipping)
+		if (CurrentWeapon && CurrentWeapon->WeaponPickup && CurrentWeapon->IsDroppable() && !InventoryEmpty())//&& CurrentWeapon->GetCurrentState() != EWeaponState::Equipping)
 		{
 			DropWeapon();
 		}
@@ -1874,15 +2119,34 @@ void AShooterCharacter::OnMelee()
 			//}
 			if (InventoryOffCooldown())
 			{
-				if (MeleeWeapon->CanLunge())
+				/*if (MeleeWeapon->CanLunge())
 				{
 					StartLunge(MeleeWeapon);
 				}
 				else
 				{
 					FireExtraWeapon(MeleeWeapon);
+				}*/
+
+				if (MeleeWeapon->CanLunge() && !bLunging)
+				{
+					FHitResult TempLungeHit = MeleeWeapon->LungeTrace();
+					if (TempLungeHit.GetActor() != NULL && TempLungeHit.GetActor()->ActorHasTag(FName(TEXT("Damageable"))) && !(TempLungeHit.GetActor()->IsRootComponentStatic() || TempLungeHit.GetActor()->IsRootComponentStationary()))
+					{
+						StartLunge(MeleeWeapon);
+					}
+					else
+					{
+						FireExtraWeapon(MeleeWeapon);
+					}
+				}
+				else
+				{
+					FireExtraWeapon(MeleeWeapon);
 				}
 			}
+
+			
 			
 			/*if (InventoryOffCooldown())
 			{
@@ -2090,6 +2354,11 @@ USkeletalMeshComponent* AShooterCharacter::GetSpecifcPawnMesh( bool WantFirstPer
 FName AShooterCharacter::GetWeaponAttachPoint() const
 {
 	return WeaponAttachPoint;
+}
+
+FName AShooterCharacter::GetWeaponHolsterPoint() const
+{
+	return WeaponHolsterPoint;
 }
 
 float AShooterCharacter::GetTargetingSpeedModifier() const

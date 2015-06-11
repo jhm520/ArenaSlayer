@@ -93,6 +93,9 @@ protected:
 
 	/** If this projectile is stuck to a target*/
 	bool bStuck;
+	
+	/** Time when projectile stuck*/
+	float StuckTime;
 
 	virtual void ReceiveHit(UPrimitiveComponent * MyComp, AActor * Other, UPrimitiveComponent * OtherComp,
 		bool bSelfMoved, FVector HitLocation, FVector HitNormal, FVector NormalImpulse, const FHitResult & Hit) override;

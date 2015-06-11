@@ -114,6 +114,7 @@ void AShooterProjectile::Stick(UPrimitiveComponent * MyComp, UPrimitiveComponent
 	}
 
 	bStuck = true;
+	StuckTime = GetWorld()->GetTimeSeconds();
 	MovementComp->StopMovementImmediately();
 	MovementComp->bShouldBounce = 0;
 	MovementComp->ProjectileGravityScale = 0;
@@ -216,6 +217,11 @@ void AShooterProjectile::Tick(float DeltaSeconds)
 		TriggerOnImpact();
 	}
 	else if (WeaponConfig.ExplodeTimeAfterBounce > 0.0f && bBounced && CurrentTime - BounceTime > WeaponConfig.ExplodeTimeAfterBounce)
+	{
+		//blow up
+		TriggerOnImpact();
+	}
+	else if (WeaponConfig.bSticky && WeaponConfig.ExplodeTimeAfterBounce > 0.0f && bStuck && CurrentTime - StuckTime > WeaponConfig.ExplodeTimeAfterBounce)
 	{
 		//blow up
 		TriggerOnImpact();

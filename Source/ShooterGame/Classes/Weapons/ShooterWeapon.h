@@ -28,7 +28,7 @@ struct FWeaponData
 		bool bInfiniteClip;
 
 	/** max ammo */
-	UPROPERTY(EditDefaultsOnly, Category = Ammo)
+	UPROPERTY(EditDefaultsOnly, Category = Ammo)  
 		int32 MaxAmmo;
 
 	/** clip size */
@@ -71,6 +71,10 @@ struct FWeaponData
 	/* if this weapon can be equipped*/
 	UPROPERTY(EditDefaultsOnly, Category = WeaponStat)
 		bool bEquippable;
+
+	/* if this weapon can be dropped*/
+	UPROPERTY(EditDefaultsOnly, Category = WeaponStat)
+		bool bDroppable;
 
 	/** if this weapon is always equipped (i.e. grenades/melee)*/
 	UPROPERTY(EditDefaultsOnly, Category = WeaponStat)
@@ -117,6 +121,21 @@ struct FWeaponData
 	UPROPERTY(EditDefaultsOnly, Category = WeaponStat)
 		bool bHeadshot;
 
+	UPROPERTY(EditDefaultsOnly, Category = WeaponStat)
+		float EquipAttachTime;
+
+	UPROPERTY(EditDefaultsOnly, Category = WeaponStat)
+		bool AttachOnEquip;
+
+	/** FOV when targeting with this weapon*/
+	UPROPERTY(EditDefaultsOnly, Category = WeaponStat)
+		float TargetingFOV;
+
+	/** Second level FOV */
+
+	UPROPERTY(EditDefaultsOnly, Category = WeaponStat)
+		float TargetingFOV2;
+
 	/*End John's code*/
 
 	/** defaults */
@@ -135,6 +154,7 @@ struct FWeaponData
 		TimeBetweenBursts = 0.5f;
 		bExtraWeapon = false;
 		bEquippable = true;
+		bDroppable = true;
 		bNeedsReload = true;
 		AltEquipDuration = 0.0f;
 		bSphereTrace = false;
@@ -147,7 +167,10 @@ struct FWeaponData
 		bAssassinate = false;
 		bHeadshot = false;
 		bAlwaysEquipped = false;
-
+		EquipAttachTime = 0.0f;
+		AttachOnEquip = false;
+		TargetingFOV = 60.0f;
+		TargetingFOV2 = 0.0f;
 	}
 };
 
@@ -209,8 +232,12 @@ class AShooterWeapon : public AActor
 	/** weapon is now equipped by owner pawn */
 	virtual void OnEquipFinished();
 
-	/** weapon is holstered by owner pawn */
-	virtual void OnUnEquip();
+	/** Weapon is holstered*/
+	void HolsterWeapon();
+
+	/** weapon is holstered by owner pawn
+	or being dropped*/
+	virtual void OnUnEquip(bool bDropped = false);
 
 	/** [server] weapon was added to pawn's inventory */
 	virtual void OnEnterInventory(AShooterCharacter* NewOwner);
@@ -303,6 +330,12 @@ class AShooterWeapon : public AActor
 
 	/** find lunge hit */
 	FHitResult LungeTrace() const;
+
+	/** Get targeting FOV*/
+	float GetTargetingFOV();
+
+	/* Get "second leve" targeting FOV**/
+	float GetTargetingFOV2();
 
 	//////////////////////////////////////////////////////////////////////////
 	// Reading data
@@ -410,9 +443,17 @@ class AShooterWeapon : public AActor
 	/** Is this weapon an extra weapon? Can it be picked up when your inventory is full?*/
 	bool IsExtraWeapon();
 
-
 	/** Is this weapon equippable? */
 	bool IsEquippable();
+
+	/** Is this weapon droppable? */
+	bool IsDroppable();
+
+	/** Get this weapon's attach point name*/
+	FName GetWeaponAttachPoint();
+
+	/** Get this weapon's holster attach point*/
+	FName GetWeaponHolsterPoint();
 
 protected:
 
@@ -443,6 +484,14 @@ protected:
 	/** name of bone/socket for muzzle in weapon mesh */
 	UPROPERTY(EditDefaultsOnly, Category = Effects)
 		FName MuzzleAttachPoint;
+
+	/** name of bone/socket for Weapon in weapon mesh */
+	UPROPERTY(EditDefaultsOnly, Category = Effects)
+		FName WeaponAttachPoint;
+
+	/** name of bone/socket for Holster in weapon mesh */
+	UPROPERTY(EditDefaultsOnly, Category = Effects)
+		FName WeaponHolsterPoint;
 
 	/** FX for muzzle flash */
 	UPROPERTY(EditDefaultsOnly, Category = Effects)
@@ -604,6 +653,12 @@ protected:
 	/*Timer for delaying weapon firing*/
 	FTimerHandle TimerHandle_HandleShot;
 
+	/*Timer for attaching weapon mesh*/
+	FTimerHandle TimerHandle_AttachMeshToPawn;
+
+	/*Timer for detaching weapon mesh*/
+	FTimerHandle TimerHandle_DetachMeshFromPawn;
+
 	//////////////////////////////////////////////////////////////////////////
 	// Input - server side
 
@@ -680,6 +735,9 @@ protected:
 
 	/** detaches weapon mesh from pawn */
 	void DetachMeshFromPawn();
+
+	UFUNCTION(Reliable, Client)
+	void ClientDetachMeshFromPawn();
 
 
 	//////////////////////////////////////////////////////////////////////////

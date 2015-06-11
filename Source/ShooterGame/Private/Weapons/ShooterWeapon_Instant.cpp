@@ -50,8 +50,14 @@ void AShooterWeapon_Instant::ServerNotifyHit_Implementation(const FHitResult Imp
 		//Melee-shooting fix here
 		if ((ViewDotHitDir > InstantConfig.AllowedViewDotHitDir - WeaponAngleDot) || ((Instigator->GetActorLocation() - Impact.Location).Size() < 200.0f))
 		{
-			if (CurrentState != EWeaponState::Idle)
+			//John
+			// Had to put WeaponConfig.TimeBeforeShot > 0.0f here to accomodate for delayed fire weapons
+			if (CurrentState != EWeaponState::Idle || WeaponConfig.TimeBeforeShot > 0.0f)
 			{
+				/*if (GEngine)
+				{
+					GEngine->AddOnScreenDebugMessage(-1, 0.5f, FColor::Yellow, FString(TEXT("Target hit.")));
+				}*/
 				if (Impact.GetActor() == NULL)
 				{
 					if (Impact.bBlockingHit)
@@ -136,6 +142,20 @@ void AShooterWeapon_Instant::ProcessInstantHit(const FHitResult& Impact, const F
 		// if we're a client and we've hit something that is being controlled by the server
 		if (Impact.GetActor() && Impact.GetActor()->GetRemoteRole() == ROLE_Authority)
 		{
+			/*if (Role == ROLE_Authority)
+			{
+				if (GEngine)
+				{
+					GEngine->AddOnScreenDebugMessage(-1, 0.5f, FColor::Yellow, FString(TEXT("Server handle shot.")));
+				}
+			}
+			else
+			{
+				if (GEngine)
+				{
+					GEngine->AddOnScreenDebugMessage(-1, 0.5f, FColor::Yellow, FString(TEXT("Client notify server hit.")));
+				}
+			}*/
 			// notify the server of the hit
 			ServerNotifyHit(Impact, ShootDir, RandomSeed, ReticleSpread);
 		}

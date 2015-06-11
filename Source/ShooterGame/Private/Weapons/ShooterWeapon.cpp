@@ -100,6 +100,8 @@ void AShooterWeapon::PostInitializeComponents()
 		//AttachMeshToPawn();
 		bIsEquipped = true;
 	}
+
+	
 }
 
 void AShooterWeapon::Destroyed()
@@ -113,13 +115,26 @@ void AShooterWeapon::Destroyed()
 // Inventory
 
 //John
+/** Get this weapon's attach point name*/
+FName AShooterWeapon::GetWeaponAttachPoint()
+{
+	return WeaponAttachPoint;
+}
+
+/** Get this weapon's holster attach point*/
+FName AShooterWeapon::GetWeaponHolsterPoint()
+{
+	return WeaponHolsterPoint;
+}
+
+//John
 /** Equip this weapon without an animation */
 void AShooterWeapon::QuickEquip()
 {
-	AttachMeshToPawn();
+	//AttachMeshToPawn();
 	bPendingEquip = true;
 	DetermineWeaponState();
-	AttachMeshToPawn();
+	//AttachMeshToPawn();
 	bIsEquipped = true;
 	bPendingEquip = false;
 	DetermineWeaponState();
@@ -128,7 +143,7 @@ void AShooterWeapon::QuickEquip()
 //John
 void AShooterWeapon::QuickUnEquip()
 {
-	DetachMeshFromPawn();
+	//DetachMeshFromPawn();
 
 	if (!WeaponConfig.bAlwaysEquipped)
 	{
@@ -159,8 +174,15 @@ void AShooterWeapon::QuickUnEquip()
 
 void AShooterWeapon::OnEquip()
 {
-
-	AttachMeshToPawn();
+	if (WeaponConfig.EquipAttachTime > 0.0f && MyPawn && !MyPawn->bIsDying)
+	{
+		GetWorldTimerManager().SetTimer(TimerHandle_AttachMeshToPawn, this, &AShooterWeapon::AttachMeshToPawn,
+			WeaponConfig.EquipAttachTime, false);
+	}
+	else
+	{
+		AttachMeshToPawn();
+	}
 	
 	bPendingEquip = true;
 	DetermineWeaponState();
@@ -181,7 +203,10 @@ void AShooterWeapon::OnEquip()
 	//I made it so weapons can have no equip animation so you can use them instantly.
 	if (Duration > 0.0f)
 	{
-
+		/*if (GEngine)
+		{
+			GEngine->AddOnScreenDebugMessage(-1, 0.5f, FColor::Yellow, FString::SanitizeFloat(Duration));
+		}*/
 		EquipStartedTime = GetWorld()->GetTimeSeconds();
 		EquipDuration = Duration;
 
@@ -191,7 +216,7 @@ void AShooterWeapon::OnEquip()
 	{
 		EquipDuration = 0.0;
 		OnEquipFinished();
-	}
+	} 
 	/*EquipStartedTime = GetWorld()->GetTimeSeconds();
 	EquipDuration = Duration;
 
@@ -238,10 +263,23 @@ void AShooterWeapon::OnEquipFinished()
 	}
 }
 
-void AShooterWeapon::OnUnEquip()
+void AShooterWeapon::OnUnEquip (bool bDropped)
 {
 
-	DetachMeshFromPawn();
+	if (WeaponConfig.EquipAttachTime > 0.0f && MyPawn && !MyPawn->bIsDying)
+	{
+		GetWorldTimerManager().SetTimer(TimerHandle_DetachMeshFromPawn, this, &AShooterWeapon::HolsterWeapon,
+			WeaponConfig.EquipAttachTime, false);
+	}
+	else
+	{
+		/*if (GEngine)
+		{
+			GEngine->AddOnScreenDebugMessage(-1, 0.5f, FColor::Yellow, FString(TEXT("Detached.")));
+		}*/
+		DetachMeshFromPawn();
+	}
+	
 
 	bIsEquipped = false;
 	StopFire();
@@ -262,13 +300,22 @@ void AShooterWeapon::OnUnEquip()
 
 		GetWorldTimerManager().ClearTimer(TimerHandle_OnEquipFinished);
 	}
-
+	
 	DetermineWeaponState();
 }
 
 void AShooterWeapon::OnEnterInventory(AShooterCharacter* NewOwner)
 {
 	SetOwningPawn(NewOwner);
+
+	if (WeaponConfig.AttachOnEquip)
+	{
+		if (GEngine)
+		{
+			GEngine->AddOnScreenDebugMessage(-1, 0.5f, FColor::Yellow, FString(TEXT("Attached")));
+		}
+		AttachMeshToPawn();
+	}
 }
 
 void AShooterWeapon::OnLeaveInventory()
@@ -277,9 +324,69 @@ void AShooterWeapon::OnLeaveInventory()
 	{
 		SetOwningPawn(NULL);
 	}
-
-	if (IsAttachedToPawn())
+	/*if (Role == ROLE_Authority)
 	{
+		if (GEngine)
+		{
+			GEngine->AddOnScreenDebugMessage(-1, 0.5f, FColor::Yellow, FString(TEXT("Server OnLeave.")));
+		}
+	}
+	else
+	{
+		if (GEngine)
+		{
+			GEngine->AddOnScreenDebugMessage(-1, 0.5f, FColor::Yellow, FString(TEXT("Client OnLeave.")));
+			if (!bIsEquipped)
+			{
+				GEngine->AddOnScreenDebugMessage(-1, 0.5f, FColor::Yellow, FString(TEXT("Not equipped.")));
+
+			}
+
+			if (!bPendingEquip)
+			{
+				GEngine->AddOnScreenDebugMessage(-1, 0.5f, FColor::Yellow, FString(TEXT("Not pending equip.")));
+
+			}
+
+		}
+	}*/
+
+	//John
+	if (Mesh1P->GetAttachParent() || Mesh3P->GetAttachParent())
+	{
+
+	}
+
+	//Mesh1P->GetAttachParent() -> This fixed the weapon attachment bug
+	if (IsAttachedToPawn() || Mesh1P->GetAttachParent())
+	{
+		/*FString YourDebugMessage = FString(TEXT("IsAttached."));
+
+		if (GEngine)
+		{
+			GEngine->AddOnScreenDebugMessage(-1, 0.5f, FColor::Yellow, YourDebugMessage);
+		}*/
+		DetachMeshFromPawn();
+		/*if (Role == ROLE_Authority)
+		{
+		if (GEngine)
+		{
+		GEngine->AddOnScreenDebugMessage(-1, 0.5f, FColor::Yellow, FString(TEXT("Server Detach.")));
+		}
+		}
+		else
+		{
+		if (GEngine)
+		{
+		GEngine->AddOnScreenDebugMessage(-1, 0.5f, FColor::Yellow, FString(TEXT("Client Detach.")));
+		}
+		}*/
+
+
+		/*if (Role == ROLE_Authority)
+		{
+			ClientDetachMeshFromPawn();
+		}*/
 		OnUnEquip();
 	}
 }
@@ -292,7 +399,8 @@ void AShooterWeapon::AttachMeshToPawn()
 		DetachMeshFromPawn();
 
 		// For locally controller players we attach both weapons and let the bOnlyOwnerSee, bOwnerNoSee flags deal with visibility.
-		FName AttachPoint = MyPawn->GetWeaponAttachPoint();
+		//FName AttachPoint = MyPawn->GetWeaponAttachPoint();
+		FName AttachPoint = GetWeaponAttachPoint();
 		if (MyPawn->IsLocallyControlled() == true)
 		{
 			USkeletalMeshComponent* PawnMesh1p = MyPawn->GetSpecifcPawnMesh(true);
@@ -312,14 +420,49 @@ void AShooterWeapon::AttachMeshToPawn()
 	}
 }
 
+void AShooterWeapon::HolsterWeapon()
+{
+	
+	if (MyPawn)
+	{
+		//// Remove and hide both first and third person meshes
+		DetachMeshFromPawn();
+		
+		// For locally controller players we attach both weapons and let the bOnlyOwnerSee, bOwnerNoSee flags deal with visibility.
+		FName AttachPoint = GetWeaponHolsterPoint();
+		if (MyPawn->IsLocallyControlled() == true)
+		{
+			USkeletalMeshComponent* PawnMesh1p = MyPawn->GetSpecifcPawnMesh(true);
+			USkeletalMeshComponent* PawnMesh3p = MyPawn->GetSpecifcPawnMesh(false);
+			Mesh1P->SetHiddenInGame(true);
+			Mesh3P->SetHiddenInGame(false);
+			Mesh1P->AttachTo(PawnMesh1p, AttachPoint);
+			Mesh3P->AttachTo(PawnMesh3p, AttachPoint);
+		}
+		else
+		{
+			USkeletalMeshComponent* UseWeaponMesh = GetWeaponMesh();
+			USkeletalMeshComponent* UsePawnMesh = MyPawn->GetPawnMesh();
+			UseWeaponMesh->AttachTo(UsePawnMesh, AttachPoint);
+			UseWeaponMesh->SetHiddenInGame(false);
+		}
+	}
+}
+
 void AShooterWeapon::DetachMeshFromPawn()
-{ 
+{
+
 	Mesh1P->DetachFromParent();
 	Mesh1P->SetHiddenInGame(true);
 
 	//John
 	Mesh3P->DetachFromParent();
 	Mesh3P->SetHiddenInGame(true);
+}
+
+void AShooterWeapon::ClientDetachMeshFromPawn_Implementation()
+{
+	DetachMeshFromPawn();
 }
 
 
@@ -489,6 +632,11 @@ bool AShooterWeapon::IsEquippable()
 	return WeaponConfig.bEquippable;
 }
 
+bool AShooterWeapon::IsDroppable()
+{
+	return WeaponConfig.bDroppable;
+}
+
 void AShooterWeapon::StartReload(bool bFromReplication)
 {
 	if (!bFromReplication && Role < ROLE_Authority)
@@ -626,6 +774,17 @@ FHitResult AShooterWeapon::LungeTrace() const
 	{
 		return Hit;
 	}*/
+}
+
+/** Get targeting FOV*/
+float AShooterWeapon::GetTargetingFOV()
+{
+	return WeaponConfig.TargetingFOV;
+}
+
+float AShooterWeapon::GetTargetingFOV2()
+{
+	return WeaponConfig.TargetingFOV2;
 }
 
 bool AShooterWeapon::CanLunge() const
@@ -782,29 +941,68 @@ void AShooterWeapon::UseAmmo()
 void AShooterWeapon::HandleShot()
 {
 
-	if (Role == ROLE_Authority)
+	/*if (Role == ROLE_Authority)
+	{*/
+		/*if (GEngine)
+		{
+			GEngine->AddOnScreenDebugMessage(-1, 0.5f, FColor::Yellow, FString(TEXT("Server.")));
+		}*/
+	/*if (Role == ROLE_Authority)
 	{
 		if (GEngine)
 		{
-			GEngine->AddOnScreenDebugMessage(-1, 0.5f, FColor::Yellow, FString(TEXT("Server.")));
+			GEngine->AddOnScreenDebugMessage(-1, 0.5f, FColor::Yellow, FString(TEXT("Server handle shot.")));
 		}
-		FireWeapon();
-
-		UseAmmo();
-
-		// update firing FX on remote clients if function was called on server
-		BurstCounter++;
-
-		GetWorldTimerManager().ClearTimer(TimerHandle_HandleShot);
 	}
 	else
 	{
 		if (GEngine)
 		{
-			GEngine->AddOnScreenDebugMessage(-1, 0.5f, FColor::Yellow, FString(TEXT("Client.")));
+			GEngine->AddOnScreenDebugMessage(-1, 0.5f, FColor::Yellow, FString(TEXT("Client handle shot.")));
 		}
-		ServerHandleShot();
-	}
+	}*/
+		
+	FireWeapon();
+
+	//UseAmmo();
+
+	////// update firing FX on remote clients if function was called on server
+	//BurstCounter++;
+
+	GetWorldTimerManager().ClearTimer(TimerHandle_HandleShot);
+
+	//// local client will notify server
+	//if (Role < ROLE_Authority)
+	//{
+	//	ServerHandleFiring();
+	//}
+
+	//// reload after firing last round
+	//if (CurrentAmmoInClip <= 0 && CanReload())
+	//{
+	//	StartReload();
+	//}
+
+	//// setup refire timer
+	//bRefiring = (CurrentState == EWeaponState::Firing && WeaponConfig.TimeBetweenShots > 0.0f);
+	//if (bRefiring)
+	//{
+	//	GetWorldTimerManager().SetTimer(TimerHandle_HandleFiring, this, &AShooterWeapon::HandleFiring, WeaponConfig.TimeBetweenShots, false);
+	//}
+
+		/*if (Role < ROLE_Authority)
+		{
+			ServerHandleShot();
+		}*/
+		
+	//}
+	//else
+	//{
+	//	if (GEngine)
+	//	{
+	//		GEngine->AddOnScreenDebugMessage(-1, 0.5f, FColor::Yellow, FString(TEXT("Client.")));
+	//	}
+	//}
 
 	
 }
@@ -815,6 +1013,20 @@ void AShooterWeapon::HandleFiring()
 	{
 		if (GetNetMode() != NM_DedicatedServer)
 		{
+			/*if (Role == ROLE_Authority)
+			{
+				if (GEngine)
+				{
+					GEngine->AddOnScreenDebugMessage(-1, 0.5f, FColor::Yellow, FString(TEXT("Server simulate.")));
+				}
+			}
+			else
+			{
+				if (GEngine)
+				{
+					GEngine->AddOnScreenDebugMessage(-1, 0.5f, FColor::Yellow, FString(TEXT("Client simulate.")));
+				}
+			}*/
 			SimulateWeaponFire();
 		}
 
@@ -822,7 +1034,7 @@ void AShooterWeapon::HandleFiring()
 		{
 			if (WeaponConfig.TimeBeforeShot > 0.0f)
 			{
-				if (Role == ROLE_Authority)
+				/*if (Role == ROLE_Authority)
 				{
 					if (GEngine)
 					{
@@ -835,11 +1047,28 @@ void AShooterWeapon::HandleFiring()
 					{
 						GEngine->AddOnScreenDebugMessage(-1, 0.5f, FColor::Yellow, FString(TEXT("Client set timer.")));
 					}
-				}
+				}*/
 				GetWorldTimerManager().SetTimer(TimerHandle_HandleShot, this, &AShooterWeapon::HandleShot, WeaponConfig.TimeBeforeShot, false);
+
+				UseAmmo();
+				BurstCounter++;
 			}
 			else
 			{
+				/*if (Role == ROLE_Authority)
+				{
+					if (GEngine)
+					{
+						GEngine->AddOnScreenDebugMessage(-1, 0.5f, FColor::Yellow, FString(TEXT("Server FireWeapon.")));
+					}
+				}
+				else
+				{
+					if (GEngine)
+					{
+						GEngine->AddOnScreenDebugMessage(-1, 0.5f, FColor::Yellow, FString(TEXT("Client FireWeapon.")));
+					}
+				}*/
 				//HandleShot();
 				FireWeapon();
 
@@ -881,6 +1110,21 @@ void AShooterWeapon::HandleFiring()
 
 	if (MyPawn && MyPawn->IsLocallyControlled())
 	{
+		/*if (Role == ROLE_Authority)
+		{
+			if (GEngine)
+			{
+				GEngine->AddOnScreenDebugMessage(-1, 0.5f, FColor::Yellow, FString(TEXT("Server notify.")));
+			}
+		}
+		else
+		{
+			if (GEngine)
+			{
+				GEngine->AddOnScreenDebugMessage(-1, 0.5f, FColor::Yellow, FString(TEXT("Client notify.")));
+			}
+		}*/
+
 		// local client will notify server
 		if (Role < ROLE_Authority)
 		{
@@ -915,7 +1159,7 @@ void AShooterWeapon::ServerHandleFiring_Implementation()
 
 	HandleFiring();
 
-	if (bShouldUpdateAmmo)
+	if (bShouldUpdateAmmo || WeaponConfig.TimeBeforeShot > 0.0f)
 	{
 		// update ammo
 		UseAmmo();
@@ -1230,6 +1474,20 @@ void AShooterWeapon::OnRep_MyPawn()
 	}
 	else
 	{
+		/*if (Role == ROLE_Authority)
+		{
+			if (GEngine)
+			{
+				GEngine->AddOnScreenDebugMessage(-1, 0.5f, FColor::Yellow, FString(TEXT("Server OnRep_MyPawn.")));
+			}
+		}
+		else
+		{
+			if (GEngine)
+			{
+				GEngine->AddOnScreenDebugMessage(-1, 0.5f, FColor::Yellow, FString(TEXT("Client OnRep_MyPawn.")));
+			}
+		}*/
 		OnLeaveInventory();
 	}
 }
@@ -1264,6 +1522,21 @@ void AShooterWeapon::SimulateWeaponFire()
 	{
 		return;
 	}
+
+	/*if (Role == ROLE_Authority)
+	{
+		if (GEngine)
+		{
+			GEngine->AddOnScreenDebugMessage(-1, 0.5f, FColor::Yellow, FString(TEXT("Server Simulate.")));
+		}
+	}
+	else
+	{
+		if (GEngine)
+		{
+			GEngine->AddOnScreenDebugMessage(-1, 0.5f, FColor::Yellow, FString(TEXT("Client Simulate.")));
+		}
+	}*/
 
 	if (MuzzleFX)
 	{

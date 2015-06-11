@@ -77,6 +77,14 @@ class AShooterCharacter : public ACharacter
 	 */
 	void EquipWeapon(class AShooterWeapon* Weapon);
 
+	/**
+	* [server + local] holsters weapon from inventory
+	*
+	* @param Weapon	Weapon to holster
+	*/
+
+	void HolsterWeapon(class AShooterWeapon* Weapon);
+
 	//John
 	/** [server + local]
 	 *
@@ -208,6 +216,9 @@ class AShooterCharacter : public ACharacter
 	/** player released targeting action */
 	void OnStopTargeting();
 
+	/** player pressed toggle targeting action */
+	void OnToggleTargeting();
+
 	/** player pressed next weapon action */
 	void OnNextWeapon();
 
@@ -268,8 +279,15 @@ class AShooterCharacter : public ACharacter
 	/** get weapon attach point */
 	FName GetWeaponAttachPoint() const;
 
+	/** get weapon attach point */
+	FName GetWeaponHolsterPoint() const;
+
 	/** get total number of inventory items */
 	int32 GetInventoryCount() const;
+
+	/** get player's current FOV */
+
+	float GetFOV();
 
 	/** 
 	 * get weapon from inventory at index. Index validity is not checked.
@@ -330,6 +348,14 @@ class AShooterCharacter : public ACharacter
 
 	bool InventoryFull();
 
+	/** Check if player's inventory is full*/
+
+	bool InventoryEmpty();
+
+
+	/** Get number of primary weapons*/
+	int NumPrimaryWeapons();
+
 	///** get the originating location for quick fire damage */
 	//FVector GetQuickFireOrigin();
 
@@ -378,6 +404,10 @@ protected:
 	/** socket or bone name for attaching weapon mesh */
 	UPROPERTY(EditDefaultsOnly, Category=Inventory)
 	FName WeaponAttachPoint;
+
+	/** socket or bone name for attaching weapon mesh */
+	UPROPERTY(EditDefaultsOnly, Category = Inventory)
+		FName WeaponHolsterPoint;
 
 	/** default inventory list */
 	UPROPERTY(EditDefaultsOnly, Category=Inventory)
@@ -526,6 +556,10 @@ protected:
 
 	/*If the player has started regenerating*/
 	bool StartedRegen;
+
+	/** Player's FOV */
+	UPROPERTY(EditDefaultsOnly, Category=Pawn)
+		float DefaultFOV;
 
 	
 
@@ -723,6 +757,14 @@ protected:
 	/** equip weapon */
 	UFUNCTION(reliable, server, WithValidation)
 	void ServerEquipWeapon(class AShooterWeapon* NewWeapon);
+
+	/** equip weapon */
+	UFUNCTION(reliable, server, WithValidation)
+	void ServerHolsterWeapon(class AShooterWeapon* NewWeapon);
+
+	/** equip weapon */
+	UFUNCTION(reliable, client)
+	void ClientHolsterWeapon(class AShooterWeapon* NewWeapon);
 
 	/** Drop weapon*/
 	UFUNCTION(reliable, server, WithValidation)
